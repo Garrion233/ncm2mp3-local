@@ -1,0 +1,25 @@
+{
+  "name": "ncm2mp3-local",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "description": "单文件离线的 NCM 批量转换工具：Worker 池 + 流式分块 + 主线程零字节处理。",
+  "license": "MIT",
+  "author": "Garrion",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Garrion233/ncm2mp3-local.git"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build:single": "node tools/build-single.mjs",
+    "verify:single": "node tools/verify-single.mjs",
+    "verify:stress": "node tools/verify-stress.mjs",
+    "fixtures": "node tools/make-fixtures.mjs",
+    "test": "node tests/roundtrip.mjs",
+    "test:limits": "node tests/limits.mjs",
+    "cli": "node cli.mjs"
+  }
+}

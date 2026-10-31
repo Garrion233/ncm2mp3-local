@@ -1,0 +1,32 @@
+# ---- 依赖 ----
+node_modules/
+
+# ---- 测试/基准生成物（可用 tools/make-fixtures.mjs 秒级重建）----
+fixtures/
+fixtures-*/
+fixtures-stress/
+out/
+*.expected.mp3
+*.expected.flac
+*.part
+*.crdownload
+
+# ---- 本地私有配置（含真实密钥，绝不提交）----
+config.local.json
+
+# ---- 本地基准与临时产物 ----
+artifacts/
+.tmp*
+*.log
+chrome-profile*/
+*-chrome/
+
+# ---- 操作系统 / 编辑器 ----
+.DS_Store
+Thumbs.db
+desktop.ini
+.idea/
+.vscode/
+*.swp
+
+# 注意：ncm2mp3-batch.html 是刻意提交的发布产物（可复现构建，CI 会校验），不要忽略。

@@ -1,0 +1,65 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build-test:
+    name: Build & test (Node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [20, 22]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+
+      - name: Build single-file app
+        run: node tools/build-single.mjs
+
+      - name: Verify committed artifact is reproducible
+        run: |
+          if ! git diff --quiet -- ncm2mp3-batch.html; then
+            echo "::error::ncm2mp3-batch.html 与源码不一致，请运行 node tools/build-single.mjs 后提交"
+            git diff --stat
+            exit 1
+          fi
+
+      - name: Verify no built-in decryption key exports
+        run: |
+          if grep -qE 'export const (CORE_KEY|META_KEY)' ncm2mp3-batch.html src/ncm.js; then
+            echo "::error::检测到内置密钥导出，构建失败"
+            exit 1
+          fi
+
+      - name: Generate deterministic fixtures
+        run: node tools/make-fixtures.mjs --out fixtures --profile default
+
+      - name: Byte-exact roundtrip tests (9 chunk sizes)
+        run: node tests/roundtrip.mjs
+
+      - name: ZIP hard-limit tests
+        run: node tests/limits.mjs
+
+      - name: CLI smoke test (synthetic test keys)
+        run: node cli.mjs fixtures --out out -w 4 --core-key NCMTESTCOREKEY!! --meta-key NCMTESTMETAKEY!!
+
+      - name: Upload single-file artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ncm2mp3-batch-node${{ matrix.node }}
+          path: ncm2mp3-batch.html
+          if-no-files-found: error

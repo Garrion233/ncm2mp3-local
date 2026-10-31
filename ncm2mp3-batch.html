@@ -1,0 +1,2748 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>NCM → MP3 批量转换（本地离线版）</title>
+<meta name="description" content="第三方 NCM 文件批量转换为 MP3/FLAC，纯浏览器本地处理，不上传、可离线、支持 ZIP 打包；解密密钥由使用者本地提供。" />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23206bc4'/%3E%3Ctext x='16' y='23' font-size='19' text-anchor='middle' fill='white'%3E%E2%99%AA%3C/text%3E%3C/svg%3E" />
+<!--
+  ============================================================================
+  开源许可与致谢 / THIRD-PARTY NOTICES（本文件及其源码中必须保留本段）
+  ============================================================================
+  1) UI 设计参考：Tabler（后台管理模板 / 设计系统）
+     - 仓库：https://github.com/tabler/tabler
+     - 版本：v1.7.3（tag: @tabler/core@1.7.3），参考 commit: 096491dea4886f78891c2e29310351d5aee6c460
+     - 许可证：MIT License, Copyright (c) 2018-2026 The Tabler Authors
+     - 使用方式：本页面在布局结构、间距/颜色令牌、卡片/表格/徽标/进度条等组件的视觉语言上
+       参考并改写了 Tabler 的设计；未打包 Tabler 的 Bootstrap 依赖，也未引入其 JS。
+       (Modified: trimmed to a single-file, dependency-free CSS subset.)
+
+  2) 图标：Tabler Icons
+     - 仓库：https://github.com/tabler/tabler-icons
+     - 版本：v3.50.0，参考 commit: 6904efd245391ad396df17654738f52f6da8c40e
+     - 许可证：MIT License, Copyright (c) 2020-2026 Paweł Kuna
+     - 使用方式：在下方 SVG sprite 中内联了其中 11 个图标（music, cloud-upload, folder,
+       download, package, refresh, x, trash, check, sun, moon），未做图形修改。
+       本页面把多个图标合并进一个 sprite 并使用 <symbol>/<use> 引用。
+
+  以下为上述两个项目的 MIT 许可证全文，随本文件一并分发：
+
+  ---------------------------------------------------------------------------
+  MIT License — Tabler
+  Copyright (c) 2018-2026 The Tabler Authors
+
+  Permission is hereby granted, free of charge, to any person obtaining a copy
+  of this software and associated documentation files (the "Software"), to deal
+  in the Software without restriction, including without limitation the rights
+  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+  copies of the Software, and to permit persons to whom the Software is
+  furnished to do so, subject to the following conditions:
+
+  The above copyright notice and this permission notice shall be included in
+  all copies or substantial portions of the Software.
+
+  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+  SOFTWARE.
+
+  ---------------------------------------------------------------------------
+  MIT License — Tabler Icons
+  Copyright (c) 2020-2026 Paweł Kuna
+
+  Permission is hereby granted, free of charge, to any person obtaining a copy
+  of this software and associated documentation files (the "Software"), to deal
+  in the Software without restriction, including without limitation the rights
+  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+  copies of the Software, and to permit persons to whom the Software is
+  furnished to do so, subject to the following conditions:
+
+  The above copyright notice and this permission notice shall be included in
+  all copies or substantial portions of the Software.
+
+  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+  SOFTWARE.
+  ============================================================================
+-->
+<style>
+/* ============================================================
+   设计令牌（参考 Tabler 的配色/间距语言，MIT，见文件头声明）
+   ============================================================ */
+:root {
+  --font: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+          "Microsoft YaHei UI", "Microsoft YaHei", "Helvetica Neue", Arial, sans-serif;
+  --mono: ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", monospace;
+
+  --bg: #f5f7fb;
+  --bg-accent: radial-gradient(1200px 620px at 85% -10%, #e7f0fd 0%, transparent 60%),
+               radial-gradient(900px 520px at 8% -12%, #e9f8f4 0%, transparent 55%);
+  --surface: #ffffff;
+  --surface-2: #f8fafc;
+  --surface-3: #f1f5f9;
+  --border: #e5eaf0;
+  --border-strong: #d7dee8;
+  --text: #182433;
+  --text-2: #4a5a6e;
+  --muted: #77869b;
+  --primary: #206bc4;
+  --primary-600: #1a5aa6;
+  --primary-soft: rgba(32, 107, 196, .08);
+  --success: #2fb344;
+  --success-soft: rgba(47, 179, 68, .1);
+  --danger: #d63939;
+  --danger-soft: rgba(214, 57, 57, .1);
+  --shadow-sm: 0 1px 2px rgba(24, 36, 51, .05);
+  --shadow: 0 1px 3px rgba(24, 36, 51, .06), 0 8px 24px rgba(24, 36, 51, .05);
+  --radius: 10px;
+  --radius-lg: 14px;
+}
+html[data-theme="dark"] {
+  --bg: #111827;
+  --bg-accent: radial-gradient(1100px 560px at 85% -10%, rgba(32, 107, 196, .18) 0%, transparent 60%),
+               radial-gradient(900px 520px at 8% -12%, rgba(47, 179, 68, .12) 0%, transparent 55%);
+  --surface: #1a2233;
+  --surface-2: #202b3f;
+  --surface-3: #263349;
+  --border: #2a3547;
+  --border-strong: #36445b;
+  --text: #e8edf4;
+  --text-2: #b7c2d1;
+  --muted: #8b98ab;
+  --primary: #4f9bff;
+  --primary-600: #3b86e8;
+  --primary-soft: rgba(79, 155, 255, .14);
+  --success: #3ecf5a;
+  --success-soft: rgba(62, 207, 90, .14);
+  --danger: #ff6b6b;
+  --danger-soft: rgba(255, 107, 107, .14);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, .25);
+  --shadow: 0 1px 3px rgba(0, 0, 0, .3), 0 10px 28px rgba(0, 0, 0, .25);
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; min-height: 100%; }
+body {
+  font-family: var(--font);
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--text);
+  background-color: var(--bg);
+  background-image: var(--bg-accent);
+  -webkit-font-smoothing: antialiased;
+  transition: background-color .2s ease, color .2s ease;
+}
+h1, h2 { margin: 0; font-weight: 650; letter-spacing: -.01em; }
+p { margin: 0; }
+a { color: var(--primary); text-decoration: none; }
+a:hover { text-decoration: underline; }
+code { font-family: var(--mono); font-size: .92em; }
+
+.icon { width: 18px; height: 18px; flex: none; display: inline-block; vertical-align: -3px; }
+.sprite { position: absolute; width: 0; height: 0; overflow: hidden; }
+.sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+
+/* ---------- 布局 ---------- */
+.app {
+  width: min(1080px, calc(100% - 32px));
+  margin: 0 auto;
+  padding: 26px 0 44px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+
+/* ---------- 顶栏 ---------- */
+.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 2px 2px 4px;
+}
+.brand { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.brand-mark {
+  width: 44px; height: 44px; flex: none;
+  display: grid; place-items: center;
+  color: #fff; border-radius: 12px;
+  background: linear-gradient(135deg, var(--primary), #12b5a5);
+  box-shadow: 0 8px 18px rgba(32, 107, 196, .28);
+}
+.brand-mark .icon { width: 24px; height: 24px; }
+.brand-text h1 { font-size: 19px; line-height: 1.3; }
+.brand-text p { margin-top: 2px; color: var(--muted); font-size: 12.5px; }
+.header-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  height: 26px; padding: 0 10px;
+  font-size: 12px; font-weight: 550; color: var(--text-2);
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 999px; white-space: nowrap;
+}
+.chip.primary { color: var(--primary); background: var(--primary-soft); border-color: transparent; }
+.chip .icon { width: 14px; height: 14px; }
+.dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); flex: none; }
+.dot.ok { background: var(--success); box-shadow: 0 0 0 3px var(--success-soft); }
+
+.icon-btn {
+  width: 34px; height: 34px; padding: 0;
+  display: grid; place-items: center;
+  color: var(--text-2); background: var(--surface);
+  border: 1px solid var(--border); border-radius: 9px;
+  cursor: pointer; transition: .15s ease;
+}
+.icon-btn:hover { color: var(--primary); border-color: var(--primary); background: var(--primary-soft); }
+.icon-btn .icon { width: 18px; height: 18px; }
+
+/* ---------- 统计卡片 ---------- */
+.stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+.stat {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+  padding: 12px 14px;
+  min-width: 0;
+}
+.stat-label { font-size: 12px; font-weight: 550; color: var(--muted); }
+.stat-value {
+  margin-top: 4px; font-size: 21px; font-weight: 650; line-height: 1.25;
+  font-variant-numeric: tabular-nums; letter-spacing: -.02em;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.stat-sub { margin-top: 2px; font-size: 11.5px; color: var(--muted); }
+
+/* ---------- 拖放区 ---------- */
+.dropzone {
+  display: flex; align-items: center; gap: 18px;
+  padding: 22px 22px;
+  border: 1.5px dashed var(--border-strong);
+  background: linear-gradient(180deg, var(--surface), var(--surface-2));
+  cursor: pointer;
+  transition: .16s ease;
+}
+.dropzone:hover, .dropzone.is-over {
+  border-color: var(--primary);
+  background: var(--primary-soft);
+  box-shadow: 0 0 0 4px rgba(32, 107, 196, .08);
+}
+.dz-icon {
+  width: 54px; height: 54px; flex: none;
+  display: grid; place-items: center;
+  color: var(--primary); background: var(--primary-soft);
+  border-radius: 14px;
+}
+.dz-icon .icon { width: 28px; height: 28px; }
+.dz-body { min-width: 0; }
+.dz-body h2 { font-size: 15.5px; }
+.dz-body > p { margin-top: 3px; color: var(--text-2); font-size: 13px; }
+.dz-chips { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
+
+/* ---------- 密钥输入 ---------- */
+.key-panel { padding: 14px 16px; display: flex; align-items: flex-end; gap: 14px; flex-wrap: wrap; }
+.key-field { display: flex; flex-direction: column; gap: 5px; flex: 1 1 260px; min-width: 220px; }
+.key-field label { font-size: 12px; color: var(--muted); font-weight: 600; }
+.key-field input {
+  height: 34px; padding: 0 10px; font: inherit; font-size: 12.5px;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  color: var(--text); background: var(--surface);
+  border: 1px solid var(--border); border-radius: 8px;
+}
+.key-field input:focus { outline: 2px solid var(--primary); outline-offset: 1px; border-color: transparent; }
+.key-actions { flex: 0 0 auto; }
+.key-hint { flex-basis: 100%; font-size: 11.5px; color: var(--muted); }
+.link {
+  padding: 0; font: inherit; font-size: inherit; font-weight: 600;
+  color: var(--primary); background: none; border: 0; cursor: pointer;
+  text-decoration: underline; text-underline-offset: 2px;
+}
+
+/* ---------- 工具栏 ---------- */
+.toolbar { padding: 14px 16px; display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.toolbar-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  height: 36px; padding: 0 14px;
+  font: inherit; font-size: 13px; font-weight: 600;
+  color: var(--text); background: var(--surface);
+  border: 1px solid var(--border); border-radius: 9px;
+  cursor: pointer; white-space: nowrap;
+  transition: .15s ease;
+}
+.btn .icon { width: 16px; height: 16px; }
+.btn:hover:not(:disabled) { border-color: var(--primary); color: var(--primary); background: var(--primary-soft); }
+.btn:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.btn:disabled { opacity: .45; cursor: not-allowed; }
+.btn.primary {
+  color: #fff; border-color: transparent;
+  background: linear-gradient(180deg, var(--primary), var(--primary-600));
+  box-shadow: 0 1px 2px rgba(32, 107, 196, .3), 0 6px 14px rgba(32, 107, 196, .22);
+}
+.btn.primary:hover:not(:disabled) { color: #fff; filter: brightness(1.05); }
+.btn.primary:disabled {
+  color: var(--muted); border-color: var(--border);
+  background: var(--surface-3); box-shadow: none;
+}
+.btn.ghost { background: transparent; border-color: transparent; color: var(--text-2); }
+.btn.ghost:hover:not(:disabled) { background: var(--surface-3); border-color: var(--border); color: var(--text); }
+.btn.danger { color: var(--danger); }
+.btn.danger:hover:not(:disabled) { background: var(--danger-soft); border-color: var(--danger); color: var(--danger); }
+
+.overall { margin-left: auto; min-width: 220px; flex: 1 1 260px; max-width: 340px; }
+.overall-head {
+  display: flex; justify-content: space-between; align-items: baseline;
+  margin-bottom: 6px; font-size: 12px; color: var(--muted);
+}
+.overall-head #overall-text { color: var(--text-2); font-weight: 550; }
+.overall-head #overall-pct { font-variant-numeric: tabular-nums; font-weight: 650; color: var(--text-2); }
+.bar { height: 7px; border-radius: 999px; background: var(--surface-3); overflow: hidden; }
+.bar > i {
+  display: block; height: 100%; width: 0; border-radius: 999px;
+  background: linear-gradient(90deg, var(--primary), #57a0ff);
+  transition: width .16s linear;
+}
+.bar > i.done { background: linear-gradient(90deg, var(--success), #5bd977); }
+.bar > i.err { background: linear-gradient(90deg, var(--danger), #ff8080); }
+
+/* ---------- 文件表格 ---------- */
+.table-card { overflow: hidden; }
+.table-head {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
+  padding: 13px 16px; border-bottom: 1px solid var(--border);
+}
+.table-head h2 { font-size: 14px; }
+.table-head .muted { font-size: 12px; color: var(--muted); }
+.table-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+thead th {
+  padding: 9px 16px;
+  font-size: 11.5px; font-weight: 650; letter-spacing: .03em; text-transform: uppercase;
+  color: var(--muted); text-align: left; white-space: nowrap;
+  background: var(--surface-2); border-bottom: 1px solid var(--border);
+}
+tbody td { padding: 11px 16px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+tbody tr:last-child td { border-bottom: 0; }
+tbody tr:hover { background: var(--surface-2); }
+.table-card.is-empty thead { display: none; }
+
+.col-name { width: 34%; }
+.col-status { width: 96px; }
+.col-progress { width: 22%; }
+.col-out { width: 24%; }
+.col-act { width: 104px; text-align: right; white-space: nowrap; }
+
+.row-main { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.row-icon {
+  width: 30px; height: 30px; flex: none;
+  display: grid; place-items: center;
+  color: var(--primary); background: var(--primary-soft);
+  border-radius: 8px;
+}
+.row-icon .icon { width: 16px; height: 16px; }
+.row-text { min-width: 0; }
+.fname {
+  font-size: 13px; font-weight: 600;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 34ch;
+}
+.fmeta {
+  margin-top: 1px; font-size: 11.5px; color: var(--muted);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 38ch;
+}
+.out {
+  display: inline-block; max-width: 24ch;
+  font-size: 12.5px; color: var(--text-2);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  vertical-align: bottom;
+}
+
+/* 状态徽标 */
+.state {
+  display: inline-flex; align-items: center; gap: 6px;
+  height: 24px; padding: 0 9px;
+  font-size: 11.5px; font-weight: 600; white-space: nowrap;
+  color: var(--text-2); background: var(--surface-3);
+  border-radius: 999px;
+}
+.state .dot { width: 6px; height: 6px; }
+.state.run { color: var(--primary); background: var(--primary-soft); }
+.state.run .dot { background: var(--primary); animation: pulse 1.1s ease-in-out infinite; }
+.state.done { color: var(--success); background: var(--success-soft); }
+.state.done .dot { background: var(--success); }
+.state.err { color: var(--danger); background: var(--danger-soft); }
+.state.err .dot { background: var(--danger); }
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
+@media (prefers-reduced-motion: reduce) { .state.run .dot { animation: none; } }
+
+.pct { margin-top: 4px; font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+.btn-icon {
+  width: 30px; height: 30px; padding: 0;
+  display: inline-grid; place-items: center;
+  color: var(--text-2); background: transparent;
+  border: 1px solid transparent; border-radius: 8px;
+  cursor: pointer; transition: .15s ease;
+}
+td.c-act { white-space: nowrap; }
+td.c-act .btn-icon + .btn-icon { margin-left: 2px; }
+.btn-icon .icon { width: 16px; height: 16px; }
+.btn-icon:hover { color: var(--primary); background: var(--primary-soft); border-color: transparent; }
+.btn-icon.danger:hover { color: var(--danger); background: var(--danger-soft); }
+
+.empty {
+  padding: 34px 16px 38px; text-align: center; color: var(--muted);
+  border-top: 1px dashed var(--border);
+}
+.empty .icon { width: 30px; height: 30px; color: var(--border-strong); }
+.empty p { margin-top: 8px; font-size: 13px; font-weight: 550; color: var(--text-2); }
+.empty span { font-size: 12px; }
+
+/* ---------- 完成汇总 ---------- */
+.summary {
+  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  padding: 14px 16px;
+  border-color: rgba(47, 179, 68, .28);
+  background: linear-gradient(180deg, var(--surface), var(--success-soft));
+}
+.summary-icon {
+  width: 38px; height: 38px; flex: none;
+  display: grid; place-items: center;
+  color: #fff; border-radius: 50%;
+  background: linear-gradient(180deg, var(--success), #26a13a);
+  box-shadow: 0 6px 14px rgba(47, 179, 68, .3);
+}
+.summary-title { font-size: 14px; font-weight: 650; }
+.summary-sub { margin-top: 2px; font-size: 12.5px; color: var(--text-2); }
+
+/* ---------- 页脚 ---------- */
+.app-footer { padding: 4px 2px 0; color: var(--muted); font-size: 12px; }
+.app-footer .row { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.about { margin-top: 8px; }
+.about summary {
+  cursor: pointer; font-weight: 550; color: var(--text-2);
+  list-style: none; display: inline-flex; align-items: center; gap: 6px;
+}
+.about summary::-webkit-details-marker { display: none; }
+.about summary:hover { color: var(--primary); }
+.about-body {
+  margin-top: 10px; padding: 12px 14px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+  line-height: 1.8; color: var(--text-2); font-size: 12px;
+}
+.about-body p + p { margin-top: 4px; }
+.about-body b { color: var(--text); }
+
+/* ---------- toast ---------- */
+#toast {
+  position: fixed; left: 50%; bottom: 26px; z-index: 50;
+  transform: translate(-50%, 16px); opacity: 0; pointer-events: none;
+  max-width: min(620px, calc(100vw - 32px));
+  padding: 10px 16px; border-radius: 10px;
+  background: #182433; color: #fff; font-size: 13px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, .28);
+  transition: .22s ease;
+}
+html[data-theme="dark"] #toast { background: #e8edf4; color: #182433; }
+#toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+/* ---------- 响应式 ---------- */
+@media (max-width: 860px) {
+  .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .col-out { display: none; }
+  thead th.col-out { display: none; }
+  .overall { max-width: none; margin-left: 0; }
+}
+@media (max-width: 620px) {
+  .app { width: calc(100% - 20px); padding-top: 16px; gap: 12px; }
+  .brand-text h1 { font-size: 17px; }
+  .dropzone { padding: 16px; gap: 14px; }
+  .dz-icon { width: 46px; height: 46px; }
+  .col-status { width: 84px; }
+  .col-progress { width: 32%; }
+  .col-act { width: 96px; }
+  tbody td, thead th { padding-left: 12px; padding-right: 12px; }
+  .fname { max-width: 24ch; }
+  .btn span.label { display: none; }
+  .btn { padding: 0 11px; }
+}
+</style>
+</head>
+<body>
+
+<!-- 图标 sprite：内联自 Tabler Icons v3.50.0（MIT，见文件头声明） -->
+<svg class="sprite" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
+  <defs>
+    <symbol id="i-music" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M3 17a3 3 0 1 0 6 0a3 3 0 0 0 -6 0" /><path d="M13 17a3 3 0 1 0 6 0a3 3 0 0 0 -6 0" />
+      <path d="M9 17v-13h10v13" /><path d="M9 8h10" />
+    </symbol>
+    <symbol id="i-upload" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M7 18a4.6 4.4 0 0 1 0 -9a5 4.5 0 0 1 11 2h1a3.5 3.5 0 0 1 0 7h-1" />
+      <path d="M9 15l3 -3l3 3" /><path d="M12 12l0 9" />
+    </symbol>
+    <symbol id="i-folder" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M5 4h4l3 3h7a2 2 0 0 1 2 2v8a2 2 0 0 1 -2 2h-14a2 2 0 0 1 -2 -2v-11a2 2 0 0 1 2 -2" />
+    </symbol>
+    <symbol id="i-download" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2 -2v-2" />
+      <path d="M7 11l5 5l5 -5" /><path d="M12 4l0 12" />
+    </symbol>
+    <symbol id="i-package" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M12 3l8 4.5l0 9l-8 4.5l-8 -4.5l0 -9l8 -4.5" /><path d="M12 12l8 -4.5" />
+      <path d="M12 12l0 9" /><path d="M12 12l-8 -4.5" /><path d="M16 5.25l-8 4.5" />
+    </symbol>
+    <symbol id="i-refresh" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M20 11a8.1 8.1 0 0 0 -15.5 -2m-.5 -4v4h4" /><path d="M4 13a8.1 8.1 0 0 0 15.5 2m.5 4v-4h-4" />
+    </symbol>
+    <symbol id="i-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M18 6l-12 12" /><path d="M6 6l12 12" />
+    </symbol>
+    <symbol id="i-trash" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M4 7l16 0" /><path d="M10 11l0 6" /><path d="M14 11l0 6" />
+      <path d="M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2 -2l1 -12" />
+      <path d="M9 7v-3a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v3" />
+    </symbol>
+    <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M5 12l5 5l10 -10" />
+    </symbol>
+    <symbol id="i-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M8 12a4 4 0 1 0 8 0a4 4 0 1 0 -8 0" />
+      <path d="M3 12h1m8 -9v1m8 8h1m-9 8v1m-6.4 -15.4l.7 .7m12.1 -.7l-.7 .7m0 11.4l.7 .7m-12.1 -.7l-.7 .7" />
+    </symbol>
+    <symbol id="i-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M12 3c.132 0 .263 0 .393 0a7.5 7.5 0 0 0 7.92 12.446a9 9 0 1 1 -8.313 -12.454l0 .008" />
+    </symbol>
+  </defs>
+</svg>
+
+<div class="app">
+
+  <header class="app-header">
+    <div class="brand">
+      <span class="brand-mark"><svg class="icon"><use href="#i-music"></use></svg></span>
+      <div class="brand-text">
+        <h1>NCM → MP3 批量转换</h1>
+        <p>第三方音乐平台 NCM 转 MP3 / FLAC · 纯本地 · 不上传 · 可离线</p>
+      </div>
+    </div>
+    <div class="header-actions">
+      <span class="chip primary"><span class="dot ok"></span>本地处理</span>
+      <span class="chip"><svg class="icon"><use href="#i-refresh"></use></svg>多线程</span>
+      <button class="icon-btn" id="theme-toggle" type="button" title="切换浅色 / 深色" aria-label="切换浅色 / 深色">
+        <svg class="icon"><use href="#i-moon"></use></svg>
+      </button>
+    </div>
+  </header>
+
+  <section class="stats" aria-label="批次统计">
+    <div class="stat">
+      <div class="stat-label">文件进度</div>
+      <div class="stat-value" id="stat-files">0 / 0</div>
+      <div class="stat-sub">已完成 / 总数</div>
+    </div>
+    <div class="stat">
+      <div class="stat-label">输入总大小</div>
+      <div class="stat-value" id="stat-size">0 B</div>
+      <div class="stat-sub">本次批次合计</div>
+    </div>
+    <div class="stat">
+      <div class="stat-label">平均速度</div>
+      <div class="stat-value" id="stat-speed">—</div>
+      <div class="stat-sub">输出字节 / 用时</div>
+    </div>
+    <div class="stat">
+      <div class="stat-label">用时</div>
+      <div class="stat-value" id="stat-time">—</div>
+      <div class="stat-sub">从开始到全部完成</div>
+    </div>
+  </section>
+
+  <section class="card dropzone" id="drop" tabindex="0" role="button"
+           aria-label="选择或拖入 NCM 文件">
+    <input id="file-input" type="file" accept=".ncm,audio/*" multiple hidden />
+    <div class="dz-icon"><svg class="icon"><use href="#i-upload"></use></svg></div>
+    <div class="dz-body">
+      <h2>把 .ncm 文件拖到这里</h2>
+      <p>或 <button class="link" id="btn-pick" type="button">浏览本地文件</button>，支持多选与整个文件夹拖入</p>
+      <div class="dz-chips">
+        <span class="chip"><svg class="icon"><use href="#i-folder"></use></svg>支持文件夹</span>
+        <span class="chip">自动识别 MP3 / FLAC</span>
+        <span class="chip">按「歌手 - 歌名」命名</span>
+      </div>
+    </div>
+  </section>
+
+  <section class="card key-panel" aria-label="解密密钥">
+    <div class="key-field">
+      <label for="key-core">核心密钥（16 字节 ASCII 或 32 位十六进制）</label>
+      <input id="key-core" type="password" autocomplete="off" spellcheck="false" placeholder="输入本地合法密钥" />
+    </div>
+    <div class="key-field">
+      <label for="key-meta">元数据密钥（16 字节 ASCII 或 32 位十六进制）</label>
+      <input id="key-meta" type="password" autocomplete="off" spellcheck="false" placeholder="输入本地合法密钥" />
+    </div>
+    <div class="key-actions">
+      <button id="btn-load-config" class="btn" type="button">载入本地配置</button>
+      <input id="config-input" type="file" accept=".json,application/json" hidden />
+    </div>
+    <p class="key-hint">密钥仅保存在当前页面内存中，不上传、不写入磁盘；未提供密钥时无法解密。可通过「载入本地配置」选择 config.local.json（该文件已被 .gitignore 忽略）。</p>
+  </section>
+
+  <section class="card toolbar">
+    <div class="toolbar-actions">
+      <button id="btn-start" class="btn primary" type="button">
+        <svg class="icon"><use href="#i-refresh"></use></svg><span class="label">开始转换</span>
+      </button>
+      <button id="btn-cancel" class="btn ghost" type="button" disabled>
+        <svg class="icon"><use href="#i-x"></use></svg><span class="label">取消</span>
+      </button>
+      <button id="btn-download-all" class="btn" type="button" disabled>
+        <svg class="icon"><use href="#i-download"></use></svg><span class="label">下载全部</span>
+      </button>
+      <button id="btn-zip" class="btn" type="button" disabled>
+        <svg class="icon"><use href="#i-package"></use></svg><span class="label">打包 ZIP</span>
+      </button>
+      <button id="btn-clear" class="btn ghost danger" type="button" disabled>
+        <svg class="icon"><use href="#i-trash"></use></svg><span class="label">清空</span>
+      </button>
+    </div>
+    <div class="overall">
+      <div class="overall-head"><span id="overall-text">等待文件</span><span id="overall-pct">0%</span></div>
+      <div class="bar"><i id="overall-bar"></i></div>
+    </div>
+  </section>
+
+  <section class="card table-card">
+    <div class="table-head">
+      <h2>文件列表</h2>
+      <span class="muted" id="table-hint">等待拖入文件</span>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th class="col-name">文件</th>
+            <th class="col-status">状态</th>
+            <th class="col-progress">进度</th>
+            <th class="col-out">输出文件</th>
+            <th class="col-act">操作</th>
+          </tr>
+        </thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+    <div class="empty" id="empty">
+      <svg class="icon"><use href="#i-folder"></use></svg>
+      <p>还没有文件</p>
+      <span>把 .ncm 拖进上方区域，或点击「浏览本地文件」</span>
+    </div>
+  </section>
+
+  <section class="card summary" id="summary" hidden>
+    <div class="summary-icon"><svg class="icon"><use href="#i-check"></use></svg></div>
+    <div>
+      <div class="summary-title" id="summary-title">全部转换完成</div>
+      <div class="summary-sub" id="summary-sub"></div>
+    </div>
+  </section>
+
+  <footer class="app-footer">
+    <div class="row">
+      <span>纯本地运行 · 文件不会上传到任何服务器 · 断网可用</span>
+      <span>双击即用 · 无需安装</span>
+    </div>
+    <details class="about">
+      <summary>使用说明 · 常见问题 · 开源许可与致谢</summary>
+      <div class="about-body">
+        <p><b>怎么用</b>：拖入 .ncm 文件 → 填写本地合法密钥 → 自动转换 → 「下载全部」或「打包 ZIP」；文件夹也可直接拖入。</p>
+        <p><b>密钥</b>：核心密钥与元数据密钥需自行输入（16 字节 ASCII 或 32 位十六进制）；页面不内置、不保存密钥，未填写时不会开始转换。</p>
+        <p><b>容量建议</b>：单文件 ≤1GB（实测 1.5GB 可用）；单批 ≤500 个；ZIP 整包 &lt;4GB；文件多时优先 ZIP。</p>
+        <p><b>会联网吗</b>：不会。页面没有网络请求，断网也能用。</p>
+        <p><b>UI 设计参考</b>：<a href="https://github.com/tabler/tabler" target="_blank" rel="noopener">Tabler</a> v1.7.3 · MIT · Copyright © 2018–2026 The Tabler Authors（参考 commit 096491d）。本页面仅参考其视觉语言与组件形态，未打包 Bootstrap 依赖。</p>
+        <p><b>图标</b>：<a href="https://github.com/tabler/tabler-icons" target="_blank" rel="noopener">Tabler Icons</a> v3.50.0 · MIT · Copyright © 2020–2026 Paweł Kuna（参考 commit 6904efd），内联 11 个 SVG。</p>
+        <p>MIT 许可证全文见本文件顶部注释与项目 <code>docs/THIRD_PARTY_NOTICES.md</code>。</p>
+      </div>
+    </details>
+  </footer>
+</div>
+
+<div id="toast" role="status" aria-live="polite"></div>
+
+<script>
+(function () {
+  'use strict';
+
+/* ================= 内联 Worker ================= */
+(function () {
+  var src = "\n/* ================= src/aes.js ================= */\n/**\n * 纯 JavaScript 的 AES-128 ECB 实现（无任何依赖，浏览器 / Node 通用）。\n *\n * 为什么需要它：\n *   NCM 文件里的「密钥段」和「元信息段」使用 AES-128-ECB 加密（网易私有格式）。\n *   WebCrypto 不提供 ECB 模式，因此这里自带一份最小实现。\n *   只有 2 个小段（几百字节）用到 AES，所以性能不是问题，正确性第一。\n *\n * 实现依据：FIPS-197。导出 aesEcbDecrypt / aesEcbEncrypt，按 16 字节分组，\n * 不做 PKCS#7 去填充（调用方按 NCM 规则自行截断）。\n */\n\nconst rotl8 = (x, n) => ((x << n) | (x >>> (8 - n))) & 0xff;\n\n/** 用标准算法现场生成 S 盒，避免手抄 256 个常量出错。 */\nfunction buildSBox() {\n  const sbox = new Uint8Array(256);\n  let p = 1;\n  let q = 1;\n  do {\n    // p ← p * 3 （GF(2^8)，不可约多项式 0x11b）\n    p = (p ^ ((p << 1) & 0xff) ^ (p & 0x80 ? 0x1b : 0)) & 0xff;\n    // q ← q / 3\n    q ^= (q << 1) & 0xff;\n    q ^= (q << 2) & 0xff;\n    q ^= (q << 4) & 0xff;\n    q &= 0xff;\n    if (q & 0x80) q ^= 0x09;\n    // 仿射变换\n    const xformed = (q ^ rotl8(q, 1) ^ rotl8(q, 2) ^ rotl8(q, 3) ^ rotl8(q, 4)) & 0xff;\n    sbox[p] = xformed ^ 0x63;\n  } while (p !== 1);\n  sbox[0] = 0x63;\n  return sbox;\n}\n\nfunction buildInvSBox(sbox) {\n  const inv = new Uint8Array(256);\n  for (let i = 0; i < 256; i++) inv[sbox[i]] = i;\n  return inv;\n}\n\nconst SBOX = buildSBox();\nconst INV_SBOX = buildInvSBox(SBOX);\n\nconst RCON = new Uint8Array([0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80, 0x1b, 0x36]);\n\n/** GF(2^8) 乘法 */\nfunction gmul(a, b) {\n  let p = 0;\n  for (let i = 0; i < 8; i++) {\n    if (b & 1) p ^= a;\n    const hi = a & 0x80;\n    a = (a << 1) & 0xff;\n    if (hi) a ^= 0x1b;\n    b >>= 1;\n  }\n  return p & 0xff;\n}\n\n/** AES-128 密钥扩展：返回 11 组轮密钥（176 字节） */\nfunction expandKey128(key) {\n  if (key.length !== 16) throw new RangeError('AES-128 需要 16 字节密钥，收到 ' + key.length);\n  const w = new Uint8Array(176);\n  w.set(key, 0);\n  for (let i = 4; i < 44; i++) {\n    const o = i * 4;\n    let t0 = w[o - 4];\n    let t1 = w[o - 3];\n    let t2 = w[o - 2];\n    let t3 = w[o - 1];\n    if (i % 4 === 0) {\n      // RotWord + SubWord + Rcon\n      const tmp = t0;\n      t0 = SBOX[t1] ^ RCON[i / 4 - 1];\n      t1 = SBOX[t2];\n      t2 = SBOX[t3];\n      t3 = SBOX[tmp];\n    }\n    const p = o - 16;\n    w[o] = w[p] ^ t0;\n    w[o + 1] = w[p + 1] ^ t1;\n    w[o + 2] = w[p + 2] ^ t2;\n    w[o + 3] = w[p + 3] ^ t3;\n  }\n  return w;\n}\n\nfunction addRoundKey(s, rk, round) {\n  const o = round * 16;\n  for (let i = 0; i < 16; i++) s[i] ^= rk[o + i];\n}\n\nfunction subBytes(s, box) {\n  for (let i = 0; i < 16; i++) s[i] = box[s[i]];\n}\n\n/** 状态按列存放：s[r + 4c]；ShiftRows 对第 r 行左移 r 个字节 */\nfunction shiftRows(s) {\n  let t;\n  // row 1\n  t = s[1];\n  s[1] = s[5];\n  s[5] = s[9];\n  s[9] = s[13];\n  s[13] = t;\n  // row 2\n  t = s[2];\n  s[2] = s[10];\n  s[10] = t;\n  t = s[6];\n  s[6] = s[14];\n  s[14] = t;\n  // row 3\n  t = s[15];\n  s[15] = s[11];\n  s[11] = s[7];\n  s[7] = s[3];\n  s[3] = t;\n}\n\nfunction invShiftRows(s) {\n  let t;\n  // row 1\n  t = s[13];\n  s[13] = s[9];\n  s[9] = s[5];\n  s[5] = s[1];\n  s[1] = t;\n  // row 2\n  t = s[2];\n  s[2] = s[10];\n  s[10] = t;\n  t = s[6];\n  s[6] = s[14];\n  s[14] = t;\n  // row 3\n  t = s[3];\n  s[3] = s[7];\n  s[7] = s[11];\n  s[11] = s[15];\n  s[15] = t;\n}\n\nfunction mixColumns(s) {\n  for (let c = 0; c < 4; c++) {\n    const i = c * 4;\n    const a0 = s[i], a1 = s[i + 1], a2 = s[i + 2], a3 = s[i + 3];\n    s[i] = gmul(a0, 2) ^ gmul(a1, 3) ^ a2 ^ a3;\n    s[i + 1] = a0 ^ gmul(a1, 2) ^ gmul(a2, 3) ^ a3;\n    s[i + 2] = a0 ^ a1 ^ gmul(a2, 2) ^ gmul(a3, 3);\n    s[i + 3] = gmul(a0, 3) ^ a1 ^ a2 ^ gmul(a3, 2);\n  }\n}\n\nfunction invMixColumns(s) {\n  for (let c = 0; c < 4; c++) {\n    const i = c * 4;\n    const a0 = s[i], a1 = s[i + 1], a2 = s[i + 2], a3 = s[i + 3];\n    s[i] = gmul(a0, 14) ^ gmul(a1, 11) ^ gmul(a2, 13) ^ gmul(a3, 9);\n    s[i + 1] = gmul(a0, 9) ^ gmul(a1, 14) ^ gmul(a2, 11) ^ gmul(a3, 13);\n    s[i + 2] = gmul(a0, 13) ^ gmul(a1, 9) ^ gmul(a2, 14) ^ gmul(a3, 11);\n    s[i + 3] = gmul(a0, 11) ^ gmul(a1, 13) ^ gmul(a2, 9) ^ gmul(a3, 14);\n  }\n}\n\n/** 加密一个 16 字节分组（就地写回 out） */\nfunction encryptBlock(s, rk) {\n  addRoundKey(s, rk, 0);\n  for (let round = 1; round <= 9; round++) {\n    subBytes(s, SBOX);\n    shiftRows(s);\n    mixColumns(s);\n    addRoundKey(s, rk, round);\n  }\n  subBytes(s, SBOX);\n  shiftRows(s);\n  addRoundKey(s, rk, 10);\n}\n\n/** 解密一个 16 字节分组 */\nfunction decryptBlock(s, rk) {\n  addRoundKey(s, rk, 10);\n  for (let round = 9; round >= 1; round--) {\n    invShiftRows(s);\n    subBytes(s, INV_SBOX);\n    addRoundKey(s, rk, round);\n    invMixColumns(s);\n  }\n  invShiftRows(s);\n  subBytes(s, INV_SBOX);\n  addRoundKey(s, rk, 0);\n}\n\n/**\n * AES-128-ECB 加密（不做填充；输入长度必须是 16 的倍数）。\n * @param {Uint8Array} data\n * @param {Uint8Array} key 16 字节\n * @returns {Uint8Array}\n */\nfunction aesEcbEncrypt(data, key) {\n  if (data.length % 16 !== 0) throw new RangeError('ECB 输入长度必须是 16 的倍数');\n  const rk = expandKey128(key);\n  const out = new Uint8Array(data.length);\n  const s = new Uint8Array(16);\n  for (let off = 0; off < data.length; off += 16) {\n    s.set(data.subarray(off, off + 16));\n    encryptBlock(s, rk);\n    out.set(s, off);\n  }\n  return out;\n}\n\n/**\n * AES-128-ECB 解密（不做去填充；输入长度必须是 16 的倍数）。\n * @param {Uint8Array} data\n * @param {Uint8Array} key 16 字节\n * @returns {Uint8Array}\n */\nfunction aesEcbDecrypt(data, key) {\n  if (data.length % 16 !== 0) throw new RangeError('ECB 输入长度必须是 16 的倍数');\n  const rk = expandKey128(key);\n  const out = new Uint8Array(data.length);\n  const s = new Uint8Array(16);\n  for (let off = 0; off < data.length; off += 16) {\n    s.set(data.subarray(off, off + 16));\n    decryptBlock(s, rk);\n    out.set(s, off);\n  }\n  return out;\n}\n\n/** PKCS#7 填充（供测试样本生成器反向构造 NCM 使用） */\nfunction pkcs7Pad(data, blockSize = 16) {\n  const pad = blockSize - (data.length % blockSize);\n  const out = new Uint8Array(data.length + pad);\n  out.set(data, 0);\n  out.fill(pad, data.length);\n  return out;\n}\n\n/** 去掉 PKCS#7 填充（宽松：填充非法时原样返回） */\nfunction pkcs7Unpad(data, blockSize = 16) {\n  if (data.length === 0) return data;\n  const pad = data[data.length - 1];\n  if (pad < 1 || pad > blockSize || pad > data.length) return data;\n  for (let i = data.length - pad; i < data.length; i++) {\n    if (data[i] !== pad) return data;\n  }\n  return data.subarray(0, data.length - pad);\n}\n\n\n/* ================= src/crc32.js ================= */\n/**\n * CRC32（IEEE 802.3，ZIP 使用的那种）。查表实现，可用于流式增量计算。\n * 浏览器 / Worker / Node 通用。\n */\n\nconst TABLE = (() => {\n  const t = new Uint32Array(256);\n  for (let n = 0; n < 256; n++) {\n    let c = n;\n    for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;\n    t[n] = c >>> 0;\n  }\n  return t;\n})();\n\n/**\n * 增量更新 CRC32。首块传 0，后续传上一次返回值。\n * @param {number} crc 上一次的 CRC（首块为 0）\n * @param {Uint8Array} data\n * @param {number} [start]\n * @param {number} [end]\n * @returns {number} 无符号 32 位 CRC\n */\nfunction crc32Update(crc, data, start = 0, end = data.length) {\n  let c = (crc ^ 0xffffffff) >>> 0;\n  for (let i = start; i < end; i++) c = TABLE[(c ^ data[i]) & 0xff] ^ (c >>> 8);\n  return (c ^ 0xffffffff) >>> 0;\n}\n\n/** 一次性计算 CRC32 */\nfunction crc32(data) {\n  return crc32Update(0, data);\n}\n\n\n/* ================= src/ncm.js ================= */\n/**\n * NCM 容器解析 + 解密核心（纯 JS，浏览器 / Node / Worker 通用，零依赖）。\n *\n * 权威依据（三份独立实现交叉验证）：\n *   1. ncm2mp3-core 0.3.2 (Rust) — docs.rs 源码：parser.rs / crypto/rc4.rs / format.rs\n *      https://docs.rs/crate/ncm2mp3-core/latest/source/src/\n *   2. Johnserf-Seed/ncm2mp3/docs/ARCHITECTURE.md（含 cover_frame_len 新布局说明）\n *   3. taurusxin/ncmdump src/ncmcrypt.cpp（C++ 参考实现）\n *\n * 磁盘布局（小端）：\n *   [0,8)        magic \"CTENFDAM\"\n *   [8,10)       2 字节 Gap\n *   [10,14)      key_len (u32)\n *   [14, +key)   key blob       ：需调用方提供 16 字节核心密钥（AES-128-ECB）\n *   [.., +4)     meta_len (u32)\n *   [.., +meta)  meta blob      ：需调用方提供 16 字节元数据密钥（AES-128-ECB）\n *   [.., +4)     crc32 (u32，不校验)\n *   [.., +1)     image version（1 字节，跳过）\n *   [.., +4)     cover_frame_len (u32) — 封面帧总长（图片 + 尾部 padding）\n *   [.., +4)     cover_len (u32)       — 封面图片本身长度\n *   [.., +cover_len)  封面图片（JPEG/PNG，不加密）\n *   [.., +padding)    封面 padding = cover_frame_len - cover_len\n *   [audioOffset, EOF) 音频：NCM 自定义 RC4 变体流密码（见 transformInPlace）\n *\n * 音频偏移 = 31 + key_len + meta_len + cover_frame_len\n */\n\n\n\nconst NCM_MAGIC = 'CTENFDAM';\nconst KEY_XOR_MASK = 0x64;\nconst META_XOR_MASK = 0x63;\nconst KEY_PREFIX = 'neteasecloudmusic';\nconst META_PLAIN_PREFIX = \"163 key(Don't modify):\";\nconst META_PREFIX = 'music:';\n\n/**\n * 解析用户提供的密钥文本：16 字节 ASCII 或 32 位十六进制。\n * 密钥不随程序分发，由使用者在本地输入。\n * @param {string} text\n * @param {string} [label]\n * @returns {Uint8Array} 16 字节密钥\n */\nfunction parseKeyMaterial(text, label = '解密密钥') {\n  const s = String(text ?? '').trim();\n  if (!s) throw new NcmError('NO_KEY', '请提供本地合法的解密密钥');\n  if (/^[0-9a-fA-F]{32}$/.test(s)) {\n    return Uint8Array.from(s.match(/.{2}/g), (h) => parseInt(h, 16));\n  }\n  const bytes = new TextEncoder().encode(s);\n  if (bytes.length !== 16) {\n    throw new NcmError('BAD_KEY', `${label}必须为 16 字节 ASCII 或 32 位十六进制`);\n  }\n  return bytes;\n}\n\n/** 将两个密钥文本转换为解析器需要的密钥对象 */\nfunction makeKeys(coreText, metaText) {\n  return {\n    core: parseKeyMaterial(coreText, '核心密钥'),\n    meta: parseKeyMaterial(metaText, '元数据密钥'),\n  };\n}\n\n/** 解析器统一入口：缺少密钥时给出明确提示 */\nfunction requireKeys(keys) {\n  if (!keys || !keys.core || !keys.meta) {\n    throw new NcmError('NO_KEY', '请提供本地合法的解密密钥');\n  }\n  return keys;\n}\n\n/** 单个段长度上限（正常 key/meta 只有几 KB，封面最多几 MB） */\nconst MAX_SEGMENT_LEN = 64 * 1024 * 1024;\n/** 解析头部建议先读取的字节数；不足时会继续扩容读取 */\nconst HEADER_PROBE_SIZE = 1024 * 1024;\n\nclass NcmError extends Error {\n  constructor(code, message, details) {\n    super(message);\n    this.name = 'NcmError';\n    this.code = code;\n    this.details = details || null;\n  }\n}\n\nconst U32 = (buf, off) =>\n  (buf[off] | (buf[off + 1] << 8) | (buf[off + 2] << 16) | (buf[off + 3] << 24)) >>> 0;\n\n/** 只读小工具：安全截取 UTF-8 字符串 */\nfunction decodeUtf8(bytes) {\n  try {\n    return new TextDecoder('utf-8', { fatal: false }).decode(bytes);\n  } catch {\n    return '';\n  }\n}\n\n/** Base64 → Uint8Array（浏览器 atob / Node Buffer 均可，这里用 atob 以便 worker 通用） */\nfunction base64Decode(str) {\n  const clean = str.replace(/[^A-Za-z0-9+/=]/g, '');\n  const padded = clean + '==='.slice(0, (4 - (clean.length % 4)) % 4);\n  const bin = atob(padded);\n  const out = new Uint8Array(bin.length);\n  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);\n  return out;\n}\n\n/**\n * RC4 KSA：用 key 材料生成 256 字节置换盒 S。\n * 标准 RC4 KSA（j 累加）——与 ncmdump 的 lastByte 写法等价。\n * @param {Uint8Array} key\n * @returns {Uint8Array}\n */\nfunction buildKeyBox(key) {\n  if (!key || key.length === 0) throw new NcmError('EMPTY_KEY', 'RC4 密钥为空');\n  const S = new Uint8Array(256);\n  for (let i = 0; i < 256; i++) S[i] = i;\n  let j = 0;\n  const klen = key.length;\n  for (let i = 0; i < 256; i++) {\n    j = (j + S[i] + key[i % klen]) & 0xff;\n    const t = S[i];\n    S[i] = S[j];\n    S[j] = t;\n  }\n  return S;\n}\n\n/**\n * NCM 自定义字节流变换（加密与解密是同一操作：XOR）。\n *\n * 与标准 RC4 的区别：PRGA 不使用演化状态，密钥流字节只取决于**绝对偏移**：\n *   j  = (offset + 1) & 0xFF\n *   a  = S[j]\n *   b  = S[(a + j) & 0xFF]\n *   ks = S[(a + b) & 0xFF]\n *   out[i] = in[i] ^ ks(offset + i)\n *\n * 因此密钥流周期为 256，且任意块长/任意起点都可独立处理——这是流式解码的前提。\n * （很多实现按每 0x8000 缓冲区重置 i，隐含要求块长是 256 的倍数，本实现不需要。）\n *\n * @param {Uint8Array} data 就地修改\n * @param {Uint8Array} keyBox 256 字节盒\n * @param {number} offset 该块在音频流中的绝对偏移（从 0 开始）\n */\nfunction transformInPlace(data, keyBox, offset) {\n  const S = keyBox;\n  const n = data.length;\n  for (let i = 0; i < n; i++) {\n    const j = (offset + i + 1) & 0xff;\n    const a = S[j];\n    const b = S[(a + j) & 0xff];\n    data[i] ^= S[(a + b) & 0xff];\n  }\n}\n\n/** 只算出偏移 0 开始的 256 字节密钥流（小文件 / 测试用） */\nfunction keystream(keyBox, length = 256, offset = 0) {\n  const out = new Uint8Array(length);\n  const S = keyBox;\n  for (let i = 0; i < length; i++) {\n    const j = (offset + i + 1) & 0xff;\n    const a = S[j];\n    const b = S[(a + j) & 0xff];\n    out[i] = S[(a + b) & 0xff];\n  }\n  return out;\n}\n\n/** 从解密后的音频头字节嗅探真实格式；未知返回 'bin' */\nfunction sniffFormat(head) {\n  if (!head || head.length < 2) return 'bin';\n  if (head.length >= 3 && head[0] === 0x49 && head[1] === 0x44 && head[2] === 0x33) return 'mp3'; // ID3\n  if (head[0] === 0xff && (head[1] & 0xe0) === 0xe0) return 'mp3'; // MPEG 帧同步\n  if (head.length >= 4 && head[0] === 0x66 && head[1] === 0x4c && head[2] === 0x61 && head[3] === 0x43) return 'flac';\n  if (head.length >= 4 && head[0] === 0x4f && head[1] === 0x67 && head[2] === 0x67 && head[3] === 0x53) return 'ogg';\n  if (head.length >= 12 && head[0] === 0x52 && head[1] === 0x49 && head[2] === 0x46 && head[3] === 0x46 &&\n      head[8] === 0x57 && head[9] === 0x41 && head[10] === 0x56 && head[11] === 0x45) return 'wav';\n  if (head.length >= 8 && head[4] === 0x66 && head[5] === 0x74 && head[6] === 0x79 && head[7] === 0x70) return 'm4a';\n  return 'bin';\n}\n\n/** 解析 key blob，返回 { keyUnpadded, keyRawPadded } 两个候选 RC4 密钥材料 */\nfunction decodeKeyBlob(blob, coreKey) {\n  const xored = new Uint8Array(blob.length);\n  for (let i = 0; i < blob.length; i++) xored[i] = blob[i] ^ KEY_XOR_MASK;\n  if (xored.length === 0 || xored.length % 16 !== 0) {\n    throw new NcmError('BAD_KEY_LEN', `key 段长度 ${xored.length} 不是 16 的倍数`);\n  }\n  const plain = aesEcbDecrypt(xored, coreKey);\n  const text = decodeUtf8(plain.subarray(0, 17));\n  if (text !== KEY_PREFIX) {\n    throw new NcmError('BAD_KEY_PREFIX', `key 段前缀异常：期望 \"${KEY_PREFIX}\"，实际 \"${text}\"`);\n  }\n  const unpadded = pkcs7Unpad(plain);\n  return {\n    // 主流实现（ncmdump / ncm2mp3-core）会去掉 PKCS#7 填充后取前缀之后的部分\n    keyUnpadded: unpadded.subarray(KEY_PREFIX.length),\n    // 兼容变体：不去填充（极少见，作为嗅探失败时的兜底候选）\n    keyRawPadded: plain.subarray(KEY_PREFIX.length),\n  };\n}\n\n/** 解析 meta blob（容忍失败：返回 null 而不是抛错） */\nfunction decodeMetaBlob(blob, metaKey) {\n  try {\n    if (blob.length === 0) return null;\n    const xored = new Uint8Array(blob.length);\n    for (let i = 0; i < blob.length; i++) xored[i] = blob[i] ^ META_XOR_MASK;\n\n    const prefixBytes = new TextEncoder().encode(META_PLAIN_PREFIX);\n    let prefixLen = prefixBytes.length;\n    // 极少数文件可能没有该前缀，按位置兜底\n    for (let i = 0; i < Math.min(prefixBytes.length, xored.length); i++) {\n      if (xored[i] !== prefixBytes[i]) { prefixLen = 0; break; }\n    }\n    const b64 = decodeUtf8(xored.subarray(prefixLen));\n    const decoded = base64Decode(b64);\n    if (decoded.length === 0 || decoded.length % 16 !== 0) return null;\n    const plain = pkcs7Unpad(aesEcbDecrypt(decoded, metaKey));\n    let jsonBytes = plain;\n    const musicPrefix = new TextEncoder().encode(META_PREFIX);\n    let hasPrefix = plain.length >= musicPrefix.length;\n    if (hasPrefix) {\n      for (let i = 0; i < musicPrefix.length; i++) {\n        if (plain[i] !== musicPrefix[i]) { hasPrefix = false; break; }\n      }\n    }\n    if (hasPrefix) jsonBytes = plain.subarray(musicPrefix.length);\n    const json = decodeUtf8(jsonBytes).replace(/^\\uFEFF/, '');\n    return JSON.parse(json);\n  } catch {\n    return null;\n  }\n}\n\n/**\n * 解析 NCM 头部（只需要文件开头的一段即可，不需要整个文件/封面内容）。\n * @param {Uint8Array} buf 文件前缀，长度至少覆盖到 cover_len 字段\n * @param {{core: Uint8Array, meta: Uint8Array}} keys 由使用者提供的 16 字节密钥\n * @returns 头部信息对象\n * @throws {NcmError} code=TRUNCATED 时调用方应读取更多字节后重试\n */\nfunction parseHeader(buf, keys) {\n  const k = requireKeys(keys);\n  if (buf.length < 10) throw new NcmError('TRUNCATED', '文件过短，不足 10 字节', { need: 10, have: buf.length });\n  const magic = decodeUtf8(buf.subarray(0, 8));\n  if (magic !== NCM_MAGIC) throw new NcmError('BAD_MAGIC', `不是 NCM 文件（magic=${JSON.stringify(magic)}）`);\n\n  let need = 14;\n  if (buf.length < need) throw new NcmError('TRUNCATED', '头部不完整', { need, have: buf.length, stage: 'key_len' });\n  const keyLen = U32(buf, 10);\n  if (keyLen === 0 || keyLen > MAX_SEGMENT_LEN) throw new NcmError('BAD_KEY_LEN', `key 段长度异常：${keyLen}`);\n\n  const keyStart = 14;\n  const keyEnd = keyStart + keyLen;\n  need = keyEnd + 4;\n  if (buf.length < need) throw new NcmError('TRUNCATED', '头部不完整', { need, have: buf.length, stage: 'key_blob' });\n\n  const metaLen = U32(buf, keyEnd);\n  if (metaLen > MAX_SEGMENT_LEN) throw new NcmError('BAD_META_LEN', `meta 段长度异常：${metaLen}`);\n  const metaStart = keyEnd + 4;\n  const metaEnd = metaStart + metaLen;\n\n  need = metaEnd + 4 + 1 + 4 + 4; // crc32 + imageVersion + coverFrameLen + coverLen\n  if (buf.length < need) throw new NcmError('TRUNCATED', '头部不完整', { need, have: buf.length, stage: 'cover_frame' });\n\n  const crcOffset = metaEnd;\n  const imageVersion = buf[crcOffset + 4];\n  const coverFrameLen = U32(buf, crcOffset + 5);\n  const coverLen = U32(buf, crcOffset + 9);\n  if (coverFrameLen > MAX_SEGMENT_LEN || coverLen > coverFrameLen) {\n    throw new NcmError('BAD_COVER', `封面长度字段异常：frame=${coverFrameLen} image=${coverLen}`);\n  }\n  const coverOffset = crcOffset + 13;\n  const audioOffset = coverOffset + coverFrameLen;\n\n  const { keyUnpadded, keyRawPadded } = decodeKeyBlob(buf.subarray(keyStart, keyEnd), k.core);\n  const metadata = decodeMetaBlob(buf.subarray(metaStart, metaEnd), k.meta);\n\n  return {\n    magic,\n    keyLen,\n    metaLen,\n    keyMaterial: keyUnpadded,\n    keyMaterialPadded: keyRawPadded,\n    metadata,\n    formatHint: metadata && typeof metadata.format === 'string' ? metadata.format.toLowerCase() : '',\n    coverFrameLen,\n    coverLen,\n    coverOffset,\n    audioOffset,\n    imageVersion,\n    crc32: U32(buf, crcOffset),\n    fileSize: null,\n  };\n}\n\n/**\n * 解析头部所需的最小前缀长度（用于流式读取时决定第一次读多少）。\n * 返回 { need, complete }；complete=false 表示需要读取整个前缀才能确定。\n */\nfunction probeHeader(buf, keys) {\n  try {\n    const header = parseHeader(buf, keys);\n    return { complete: true, header, need: header.audioOffset };\n  } catch (e) {\n    if (e instanceof NcmError && e.code === 'TRUNCATED' && e.details && typeof e.details.need === 'number') {\n      return { complete: false, need: e.details.need };\n    }\n    throw e;\n  }\n}\n\n/**\n * 结合音频首块密文选择 RC4 密钥材料变体并判定格式。\n * @param {object} header parseHeader 结果\n * @param {Uint8Array} firstCipher 音频最前面的密文字节（至少 16 字节，越多越稳）\n * @param {number} [fileSize] 已知文件大小时填入音频字节数\n */\nfunction createDecoder(header, firstCipher, fileSize) {\n  const variants = [\n    { name: 'unpadded', key: header.keyMaterial },\n    { name: 'padded', key: header.keyMaterialPadded },\n  ];\n  const seen = new Set();\n  let chosen = null;\n  const probe = new Uint8Array(Math.min(16, firstCipher.length));\n  probe.set(firstCipher.subarray(0, probe.length));\n\n  for (const v of variants) {\n    if (!v.key || v.key.length === 0) continue;\n    const id = Array.from(v.key.subarray(0, 8)).join(',') + ':' + v.key.length;\n    if (seen.has(id)) continue;\n    seen.add(id);\n    let box;\n    try {\n      box = buildKeyBox(v.key);\n    } catch {\n      continue;\n    }\n    const head = probe.slice();\n    transformInPlace(head, box, 0);\n    const fmt = sniffFormat(head);\n    if (!chosen && fmt !== 'bin') chosen = { keyBox: box, format: fmt, variant: v.name, confident: true };\n    if (!chosen) chosen = { keyBox: box, format: fmt, variant: v.name, confident: false };\n  }\n  if (!chosen) throw new NcmError('BAD_KEY', '无法构造 RC4 密钥盒');\n\n  // 嗅探失败时退回元信息里的 format 提示\n  if (chosen.format === 'bin' && header.formatHint) chosen.format = header.formatHint;\n  if (chosen.format === 'bin') chosen.format = 'bin';\n\n  const audioSize = typeof fileSize === 'number' && fileSize >= header.audioOffset\n    ? fileSize - header.audioOffset\n    : null;\n\n  return {\n    keyBox: chosen.keyBox,\n    keyVariant: chosen.variant,\n    format: chosen.format,\n    confident: chosen.confident,\n    audioOffset: header.audioOffset,\n    audioSize,\n  };\n}\n\n/** Windows 文件名清洗 */\nfunction sanitizeFileName(name, maxLen = 120) {\n  let s = String(name ?? '').replace(/[\\u0000-\\u001f\\u007f<>:\"/\\\\|?*]/g, '_').trim();\n  s = s.replace(/[. ]+$/g, '');\n  if (!s) s = 'unnamed';\n  if (s.length > maxLen) {\n    // 保留扩展名\n    const dot = s.lastIndexOf('.');\n    if (dot > 0 && s.length - dot <= 8) {\n      const ext = s.slice(dot);\n      s = s.slice(0, maxLen - ext.length) + ext;\n    } else {\n      s = s.slice(0, maxLen);\n    }\n  }\n  return s;\n}\n\n/**\n * 生成输出文件名：优先 \"歌手 - 歌名\"，其次元信息歌名，最后原文件名。\n * @param {object|null} metadata NCM 元信息\n * @param {string} originalName 原始 .ncm 文件名\n * @param {string} format 输出扩展名（mp3/flac/...）\n */\nfunction buildOutputName(metadata, originalName, format) {\n  const ext = (format || 'bin').replace(/^\\./, '');\n  let base = '';\n  if (metadata && typeof metadata.musicName === 'string' && metadata.musicName.trim()) {\n    const artists = Array.isArray(metadata.artist)\n      ? metadata.artist\n          .map((a) => (Array.isArray(a) ? a[0] : a))\n          .filter((x) => typeof x === 'string' && x.trim())\n          .join(' & ')\n      : '';\n    base = artists ? `${artists} - ${metadata.musicName.trim()}` : metadata.musicName.trim();\n  } else {\n    base = String(originalName || 'unnamed').replace(/\\.ncm$/i, '');\n  }\n  return sanitizeFileName(`${base}.${ext}`);\n}\n\n/** 便捷函数：把整个 NCM 字节流解码成音频字节（Node/测试用；浏览器请用流式） */\nfunction decodeNcmBuffer(ncmBytes, keys) {\n  const header = parseHeader(ncmBytes, keys);\n  const headLen = Math.min(16, Math.max(0, ncmBytes.length - header.audioOffset));\n  const dec = createDecoder(header, ncmBytes.subarray(header.audioOffset, header.audioOffset + headLen), ncmBytes.length);\n  const audio = ncmBytes.slice(header.audioOffset);\n  transformInPlace(audio, dec.keyBox, 0);\n  return {\n    format: dec.format,\n    metadata: header.metadata,\n    audio,\n    header,\n    keyVariant: dec.keyVariant,\n    outputName: buildOutputName(header.metadata, 'unnamed.ncm', dec.format),\n  };\n}\n\n\n/* ================= src/zip.js ================= */\n/**\n * 极简 ZIP 写入器（仅 STORE 存储模式，不压缩）+ 零拷贝拼装。\n *\n * 设计要点（对应\"为什么不再卡顿\"）：\n *   1. MP3/FLAC 本身已是压缩格式，再 DEFLATE 几乎不减小体积，却要消耗大量 CPU。\n *      在主线程用 JSZip 做 DEFLATE 的实现，会在批量转换后出现明显的\"假死期\"。\n *      这里用 STORE（method=0），CPU 开销≈0。\n *   2. ZIP 的本地文件头/中央目录都是几十字节的小块，头像数据用 Blob 引用直接拼进去，\n *      由浏览器负责零拷贝的 Blob 组装，主线程不搬运任何音频字节。\n *   3. CRC32 在解码环节随流增量算出（见 src/crc32.js），不需要二次遍历。\n *\n * 浏览器环境依赖 Blob；Node 18+ 也有全局 Blob，因此可直接在 CLI 里复用。\n */\n\nconst LOCAL_SIG = 0x04034b50;\nconst CENTRAL_SIG = 0x02014b50;\nconst END_SIG = 0x06054b50;\nconst FLAG_UTF8 = 0x0800; // bit 11：文件名为 UTF-8\nconst VERSION_NEEDED = 20;\nconst VERSION_MADE_BY = 20; // MS-DOS, 2.0\n\n/** 本地时间 → DOS date/time（ZIP 时间戳，2 秒精度） */\nfunction dosDateTime(date = new Date()) {\n  const year = Math.max(1980, date.getFullYear());\n  const dosTime = ((date.getHours() & 0x1f) << 11) | ((date.getMinutes() & 0x3f) << 5) | ((date.getSeconds() >> 1) & 0x1f);\n  const dosDate = (((year - 1980) & 0x7f) << 9) | (((date.getMonth() + 1) & 0x0f) << 5) | (date.getDate() & 0x1f);\n  return { dosTime, dosDate };\n}\n\nfunction u16(view, off, v) { view[off] = v & 0xff; view[off + 1] = (v >>> 8) & 0xff; }\nfunction u32(view, off, v) {\n  view[off] = v & 0xff;\n  view[off + 1] = (v >>> 8) & 0xff;\n  view[off + 2] = (v >>> 16) & 0xff;\n  view[off + 3] = (v >>> 24) & 0xff;\n}\n\nclass ZipError extends Error {\n  constructor(code, message) { super(message); this.name = 'ZipError'; this.code = code; }\n}\n\nconst MAX32 = 0xffffffff;\n\n/**\n * 组装一个 STORE 模式 ZIP。\n * @param {Array<{name: string, blob: Blob, crc32: number, size: number, mtime?: Date}>} entries\n * @returns {Blob} application/zip\n */\nfunction buildZipBlob(entries) {\n  if (!entries || entries.length === 0) throw new ZipError('EMPTY', '没有可打包的文件');\n  if (entries.length > 65535) throw new ZipError('TOO_MANY', '文件数超过 65535（ZIP 非 ZIP64 上限），请分批下载');\n\n  const encoder = new TextEncoder();\n  const parts = [];\n  const central = [];\n  let offset = 0;\n  const now = new Date();\n\n  for (const entry of entries) {\n    const size = entry.size >>> 0;\n    if (entry.size > MAX32) throw new ZipError('TOO_LARGE', `单文件超过 4GB：${entry.name}（请用 CLI 或单独下载）`);\n    if (offset > MAX32) throw new ZipError('TOO_LARGE', '总大小超过 4GB（ZIP 非 ZIP64 上限），请分批下载或用 CLI 打包');\n    const nameBytes = encoder.encode(entry.name);\n    const { dosTime, dosDate } = dosDateTime(entry.mtime || now);\n\n    const local = new Uint8Array(30 + nameBytes.length);\n    u32(local, 0, LOCAL_SIG);\n    u16(local, 4, VERSION_NEEDED);\n    u16(local, 6, FLAG_UTF8);\n    u16(local, 8, 0); // method = 0 (store)\n    u16(local, 10, dosTime);\n    u16(local, 12, dosDate);\n    u32(local, 14, entry.crc32 >>> 0);\n    u32(local, 18, size); // compressed size == size（store）\n    u32(local, 22, size);\n    u16(local, 26, nameBytes.length);\n    u16(local, 28, 0); // extra len\n    local.set(nameBytes, 30);\n\n    const cen = new Uint8Array(46 + nameBytes.length);\n    u32(cen, 0, CENTRAL_SIG);\n    u16(cen, 4, VERSION_MADE_BY);\n    u16(cen, 6, VERSION_NEEDED);\n    u16(cen, 8, FLAG_UTF8);\n    u16(cen, 10, 0);\n    u16(cen, 12, dosTime);\n    u16(cen, 14, dosDate);\n    u32(cen, 16, entry.crc32 >>> 0);\n    u32(cen, 20, size);\n    u32(cen, 24, size);\n    u16(cen, 28, nameBytes.length);\n    u16(cen, 30, 0); // extra\n    u16(cen, 32, 0); // comment\n    u16(cen, 34, 0); // disk\n    u16(cen, 36, 0); // internal attrs\n    u32(cen, 38, 0); // external attrs\n    u32(cen, 42, offset); // 本地头偏移\n    cen.set(nameBytes, 46);\n\n    parts.push(local, entry.blob);\n    central.push(cen);\n    offset += local.length + entry.size;\n  }\n\n  const centralOffset = offset;\n  // 非 ZIP64：中央目录偏移/大小也必须落在 u32 以内（覆盖\"总量刚好跨过 4GB\"的边界情况）\n  if (centralOffset > MAX32) {\n    throw new ZipError('TOO_LARGE', '总大小超过 4GB（ZIP 非 ZIP64 上限），请分批下载或用 CLI 打包');\n  }\n  let centralSize = 0;\n  for (const c of central) { parts.push(c); centralSize += c.length; }\n  if (centralSize > MAX32) throw new ZipError('TOO_LARGE', 'ZIP 中央目录超过 4GB，请分批下载');\n\n  const end = new Uint8Array(22);\n  u32(end, 0, END_SIG);\n  u16(end, 4, 0); // disk\n  u16(end, 6, 0); // cd disk\n  u16(end, 8, entries.length);\n  u16(end, 10, entries.length);\n  u32(end, 12, centralSize);\n  u32(end, 16, centralOffset);\n  u16(end, 20, 0); // comment len\n  parts.push(end);\n\n  return new Blob(parts, { type: 'application/zip' });\n}\n\n/** ZIP 条目名去重：a.mp3, a (2).mp3, ... */\nfunction uniqueZipNames(names) {\n  const used = new Set();\n  return names.map((name) => {\n    let candidate = name;\n    let n = 2;\n    while (used.has(candidate.toLowerCase())) {\n      const dot = name.lastIndexOf('.');\n      candidate = dot > 0 ? `${name.slice(0, dot)} (${n})${name.slice(dot)}` : `${name} (${n})`;\n      n++;\n    }\n    used.add(candidate.toLowerCase());\n    return candidate;\n  });\n}\n\n\n/* ================= src/worker.js ================= */\n/**\n * NCM 解码 Worker。\n *\n * 职责：把\"一个 NCM 文件 → 一个音频 Blob\"的全过程放在 Worker 线程里完成，\n * 主线程永远不接触音频字节（这是消除卡顿的核心）。\n *\n * 关键实现点：\n *   1. 流式读取：File.slice(start, end).arrayBuffer()，块大小默认 4MiB。\n *      不需要把整个文件读进内存，峰值内存 ≈ 块大小 + 输出 Blob。\n *   2. 按绝对偏移生成密钥流（src/ncm.js transformInPlace），因此**任意块长**都正确，\n *      不要求块长是 256 的倍数（一些实现常见的隐含假设）。\n *   3. 解码同一遍里增量计算 CRC32，供 ZIP(STORE) 直接使用，避免二次遍历。\n *   4. 每块之后检查 abort 标志，支持取消；进度按时间节流回传，避免消息风暴。\n */\n\n\n\n\nconst MIME = {\n  mp3: 'audio/mpeg',\n  flac: 'audio/flac',\n  m4a: 'audio/mp4',\n  wav: 'audio/wav',\n  ogg: 'audio/ogg',\n};\n\nconst DEFAULT_HEADER_PROBE = 1 << 20; // 1MiB，正常 NCM 头部只有几 KB\nconst DEFAULT_CHUNK = 4 << 20;\nconst PROGRESS_INTERVAL_MS = 120;\n\n/** @type {Set<number>} 被取消的任务 id */\nconst aborted = new Set();\n\nfunction post(msg) {\n  self.postMessage(msg);\n}\n\nasync function readRange(file, start, end) {\n  const buf = await file.slice(start, end).arrayBuffer();\n  return new Uint8Array(buf);\n}\n\n/** 读取并解析头部（自动扩容读取，直到攒够 cover_len 字段） */\nasync function readHeader(file, keys) {\n  let probeLen = Math.min(DEFAULT_HEADER_PROBE, file.size);\n  if (probeLen === 0) throw new NcmError('EMPTY_FILE', '文件为空');\n  for (;;) {\n    const prefix = await readRange(file, 0, probeLen);\n    let result;\n    try {\n      result = probeHeader(prefix, keys);\n    } catch (e) {\n      if (e instanceof NcmError && e.code === 'TRUNCATED') {\n        if (probeLen >= file.size) throw new NcmError('TRUNCATED', '文件头部不完整（可能下载中断）');\n        probeLen = Math.min(Math.max(e.details?.need || probeLen * 2, probeLen * 2), file.size);\n        continue;\n      }\n      throw e;\n    }\n    if (result.complete) {\n      if (result.header.audioOffset > file.size) {\n        throw new NcmError('TRUNCATED', `文件不完整：头部声明音频起点 ${result.header.audioOffset}，实际大小 ${file.size}`);\n      }\n      return result.header;\n    }\n    if (probeLen >= file.size) throw new NcmError('TRUNCATED', '文件头部不完整（可能下载中断）');\n    probeLen = Math.min(Math.max(result.need || probeLen * 2, probeLen * 2), file.size);\n  }\n}\n\n/** 单个文件转换 */\nasync function convertOne(file, opts, id) {\n  const t0 = performance.now();\n  const chunkSize = opts.chunkSize || DEFAULT_CHUNK;\n  const keys = makeKeys(opts.coreKey, opts.metaKey);\n\n  const header = await readHeader(file, keys);\n  if (header.audioOffset >= file.size) throw new NcmError('NO_AUDIO', '没有音频数据');\n  const audioTotal = file.size - header.audioOffset;\n\n  // 先解出音频开头，用真实魔数选择密钥变体 + 判定格式\n  const headLen = Math.min(65536, audioTotal);\n  const headCipher = await readRange(file, header.audioOffset, header.audioOffset + headLen);\n  const dec = createDecoder(header, headCipher, file.size);\n  const outName = buildOutputName(header.metadata, file.name, dec.format);\n  const mime = MIME[dec.format] || 'application/octet-stream';\n\n  post({\n    type: 'meta',\n    id,\n    outputName: outName,\n    format: dec.format,\n    formatConfident: dec.confident,\n    keyVariant: dec.keyVariant,\n    metadata: header.metadata,\n    audioTotal,\n    ncmSize: file.size,\n  });\n\n  let offset = header.audioOffset;\n  let done = 0;\n  let crc = 0;\n  let lastReport = 0;\n  /** @type {Uint8Array[]} */\n  const parts = [];\n  const buf = new Uint8Array(Math.min(chunkSize, audioTotal));\n\n  while (offset < file.size) {\n    if (aborted.has(id)) {\n      post({ type: 'aborted', id });\n      return null;\n    }\n    const len = Math.min(buf.length, file.size - offset);\n    const piece = len === buf.length ? buf : buf.subarray(0, len);\n    const ab = await file.slice(offset, offset + len).arrayBuffer();\n    piece.set(new Uint8Array(ab));\n    transformInPlace(piece, dec.keyBox, done); // 绝对偏移，任意块长均正确\n    crc = crc32Update(crc, piece);\n    // 复制一块独立内存再放进 parts，避免复用缓冲区导致数据被覆盖\n    parts.push(piece.slice());\n    done += len;\n    offset += len;\n\n    const now = performance.now();\n    if (now - lastReport >= PROGRESS_INTERVAL_MS || done === audioTotal) {\n      lastReport = now;\n      post({ type: 'progress', id, done, total: audioTotal, elapsedMs: now - t0 });\n    }\n    // 让出事件循环，使 abort / 其他消息能及时送达（Worker 内部）\n    await Promise.resolve();\n  }\n\n  const blob = new Blob(parts, { type: mime });\n  const ms = performance.now() - t0;\n  return {\n    type: 'done',\n    id,\n    blob,\n    outputName: outName,\n    size: done,\n    crc32: crc >>> 0,\n    format: dec.format,\n    metadata: header.metadata,\n    ms,\n    bytesPerSec: done / (ms / 1000),\n  };\n}\n\nself.onmessage = async (ev) => {\n  const msg = ev.data;\n  if (!msg || typeof msg !== 'object') return;\n  switch (msg.type) {\n    case 'ping':\n      post({ type: 'pong', id: msg.id });\n      return;\n    case 'abort':\n      aborted.add(msg.id);\n      return;\n    case 'convert': {\n      const { id, file, chunkSize, coreKey, metaKey } = msg;\n      try {\n        const result = await convertOne(file, { chunkSize, coreKey, metaKey }, id);\n        if (result) post(result);\n      } catch (e) {\n        post({\n          type: 'error',\n          id,\n          code: e && e.code ? e.code : 'UNKNOWN',\n          message: e && e.message ? e.message : String(e),\n        });\n      } finally {\n        aborted.delete(id);\n      }\n      return;\n    }\n    default:\n      return;\n  }\n};\n\n";
+  var url = URL.createObjectURL(new Blob([src], { type: 'text/javascript' }));
+  globalThis.__NCM_WORKER_FACTORY__ = function () { return new Worker(url); };
+})();
+
+
+/* ================= src/aes.js ================= */
+/**
+ * 纯 JavaScript 的 AES-128 ECB 实现（无任何依赖，浏览器 / Node 通用）。
+ *
+ * 为什么需要它：
+ *   NCM 文件里的「密钥段」和「元信息段」使用 AES-128-ECB 加密（网易私有格式）。
+ *   WebCrypto 不提供 ECB 模式，因此这里自带一份最小实现。
+ *   只有 2 个小段（几百字节）用到 AES，所以性能不是问题，正确性第一。
+ *
+ * 实现依据：FIPS-197。导出 aesEcbDecrypt / aesEcbEncrypt，按 16 字节分组，
+ * 不做 PKCS#7 去填充（调用方按 NCM 规则自行截断）。
+ */
+
+const rotl8 = (x, n) => ((x << n) | (x >>> (8 - n))) & 0xff;
+
+/** 用标准算法现场生成 S 盒，避免手抄 256 个常量出错。 */
+function buildSBox() {
+  const sbox = new Uint8Array(256);
+  let p = 1;
+  let q = 1;
+  do {
+    // p ← p * 3 （GF(2^8)，不可约多项式 0x11b）
+    p = (p ^ ((p << 1) & 0xff) ^ (p & 0x80 ? 0x1b : 0)) & 0xff;
+    // q ← q / 3
+    q ^= (q << 1) & 0xff;
+    q ^= (q << 2) & 0xff;
+    q ^= (q << 4) & 0xff;
+    q &= 0xff;
+    if (q & 0x80) q ^= 0x09;
+    // 仿射变换
+    const xformed = (q ^ rotl8(q, 1) ^ rotl8(q, 2) ^ rotl8(q, 3) ^ rotl8(q, 4)) & 0xff;
+    sbox[p] = xformed ^ 0x63;
+  } while (p !== 1);
+  sbox[0] = 0x63;
+  return sbox;
+}
+
+function buildInvSBox(sbox) {
+  const inv = new Uint8Array(256);
+  for (let i = 0; i < 256; i++) inv[sbox[i]] = i;
+  return inv;
+}
+
+const SBOX = buildSBox();
+const INV_SBOX = buildInvSBox(SBOX);
+
+const RCON = new Uint8Array([0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80, 0x1b, 0x36]);
+
+/** GF(2^8) 乘法 */
+function gmul(a, b) {
+  let p = 0;
+  for (let i = 0; i < 8; i++) {
+    if (b & 1) p ^= a;
+    const hi = a & 0x80;
+    a = (a << 1) & 0xff;
+    if (hi) a ^= 0x1b;
+    b >>= 1;
+  }
+  return p & 0xff;
+}
+
+/** AES-128 密钥扩展：返回 11 组轮密钥（176 字节） */
+function expandKey128(key) {
+  if (key.length !== 16) throw new RangeError('AES-128 需要 16 字节密钥，收到 ' + key.length);
+  const w = new Uint8Array(176);
+  w.set(key, 0);
+  for (let i = 4; i < 44; i++) {
+    const o = i * 4;
+    let t0 = w[o - 4];
+    let t1 = w[o - 3];
+    let t2 = w[o - 2];
+    let t3 = w[o - 1];
+    if (i % 4 === 0) {
+      // RotWord + SubWord + Rcon
+      const tmp = t0;
+      t0 = SBOX[t1] ^ RCON[i / 4 - 1];
+      t1 = SBOX[t2];
+      t2 = SBOX[t3];
+      t3 = SBOX[tmp];
+    }
+    const p = o - 16;
+    w[o] = w[p] ^ t0;
+    w[o + 1] = w[p + 1] ^ t1;
+    w[o + 2] = w[p + 2] ^ t2;
+    w[o + 3] = w[p + 3] ^ t3;
+  }
+  return w;
+}
+
+function addRoundKey(s, rk, round) {
+  const o = round * 16;
+  for (let i = 0; i < 16; i++) s[i] ^= rk[o + i];
+}
+
+function subBytes(s, box) {
+  for (let i = 0; i < 16; i++) s[i] = box[s[i]];
+}
+
+/** 状态按列存放：s[r + 4c]；ShiftRows 对第 r 行左移 r 个字节 */
+function shiftRows(s) {
+  let t;
+  // row 1
+  t = s[1];
+  s[1] = s[5];
+  s[5] = s[9];
+  s[9] = s[13];
+  s[13] = t;
+  // row 2
+  t = s[2];
+  s[2] = s[10];
+  s[10] = t;
+  t = s[6];
+  s[6] = s[14];
+  s[14] = t;
+  // row 3
+  t = s[15];
+  s[15] = s[11];
+  s[11] = s[7];
+  s[7] = s[3];
+  s[3] = t;
+}
+
+function invShiftRows(s) {
+  let t;
+  // row 1
+  t = s[13];
+  s[13] = s[9];
+  s[9] = s[5];
+  s[5] = s[1];
+  s[1] = t;
+  // row 2
+  t = s[2];
+  s[2] = s[10];
+  s[10] = t;
+  t = s[6];
+  s[6] = s[14];
+  s[14] = t;
+  // row 3
+  t = s[3];
+  s[3] = s[7];
+  s[7] = s[11];
+  s[11] = s[15];
+  s[15] = t;
+}
+
+function mixColumns(s) {
+  for (let c = 0; c < 4; c++) {
+    const i = c * 4;
+    const a0 = s[i], a1 = s[i + 1], a2 = s[i + 2], a3 = s[i + 3];
+    s[i] = gmul(a0, 2) ^ gmul(a1, 3) ^ a2 ^ a3;
+    s[i + 1] = a0 ^ gmul(a1, 2) ^ gmul(a2, 3) ^ a3;
+    s[i + 2] = a0 ^ a1 ^ gmul(a2, 2) ^ gmul(a3, 3);
+    s[i + 3] = gmul(a0, 3) ^ a1 ^ a2 ^ gmul(a3, 2);
+  }
+}
+
+function invMixColumns(s) {
+  for (let c = 0; c < 4; c++) {
+    const i = c * 4;
+    const a0 = s[i], a1 = s[i + 1], a2 = s[i + 2], a3 = s[i + 3];
+    s[i] = gmul(a0, 14) ^ gmul(a1, 11) ^ gmul(a2, 13) ^ gmul(a3, 9);
+    s[i + 1] = gmul(a0, 9) ^ gmul(a1, 14) ^ gmul(a2, 11) ^ gmul(a3, 13);
+    s[i + 2] = gmul(a0, 13) ^ gmul(a1, 9) ^ gmul(a2, 14) ^ gmul(a3, 11);
+    s[i + 3] = gmul(a0, 11) ^ gmul(a1, 13) ^ gmul(a2, 9) ^ gmul(a3, 14);
+  }
+}
+
+/** 加密一个 16 字节分组（就地写回 out） */
+function encryptBlock(s, rk) {
+  addRoundKey(s, rk, 0);
+  for (let round = 1; round <= 9; round++) {
+    subBytes(s, SBOX);
+    shiftRows(s);
+    mixColumns(s);
+    addRoundKey(s, rk, round);
+  }
+  subBytes(s, SBOX);
+  shiftRows(s);
+  addRoundKey(s, rk, 10);
+}
+
+/** 解密一个 16 字节分组 */
+function decryptBlock(s, rk) {
+  addRoundKey(s, rk, 10);
+  for (let round = 9; round >= 1; round--) {
+    invShiftRows(s);
+    subBytes(s, INV_SBOX);
+    addRoundKey(s, rk, round);
+    invMixColumns(s);
+  }
+  invShiftRows(s);
+  subBytes(s, INV_SBOX);
+  addRoundKey(s, rk, 0);
+}
+
+/**
+ * AES-128-ECB 加密（不做填充；输入长度必须是 16 的倍数）。
+ * @param {Uint8Array} data
+ * @param {Uint8Array} key 16 字节
+ * @returns {Uint8Array}
+ */
+function aesEcbEncrypt(data, key) {
+  if (data.length % 16 !== 0) throw new RangeError('ECB 输入长度必须是 16 的倍数');
+  const rk = expandKey128(key);
+  const out = new Uint8Array(data.length);
+  const s = new Uint8Array(16);
+  for (let off = 0; off < data.length; off += 16) {
+    s.set(data.subarray(off, off + 16));
+    encryptBlock(s, rk);
+    out.set(s, off);
+  }
+  return out;
+}
+
+/**
+ * AES-128-ECB 解密（不做去填充；输入长度必须是 16 的倍数）。
+ * @param {Uint8Array} data
+ * @param {Uint8Array} key 16 字节
+ * @returns {Uint8Array}
+ */
+function aesEcbDecrypt(data, key) {
+  if (data.length % 16 !== 0) throw new RangeError('ECB 输入长度必须是 16 的倍数');
+  const rk = expandKey128(key);
+  const out = new Uint8Array(data.length);
+  const s = new Uint8Array(16);
+  for (let off = 0; off < data.length; off += 16) {
+    s.set(data.subarray(off, off + 16));
+    decryptBlock(s, rk);
+    out.set(s, off);
+  }
+  return out;
+}
+
+/** PKCS#7 填充（供测试样本生成器反向构造 NCM 使用） */
+function pkcs7Pad(data, blockSize = 16) {
+  const pad = blockSize - (data.length % blockSize);
+  const out = new Uint8Array(data.length + pad);
+  out.set(data, 0);
+  out.fill(pad, data.length);
+  return out;
+}
+
+/** 去掉 PKCS#7 填充（宽松：填充非法时原样返回） */
+function pkcs7Unpad(data, blockSize = 16) {
+  if (data.length === 0) return data;
+  const pad = data[data.length - 1];
+  if (pad < 1 || pad > blockSize || pad > data.length) return data;
+  for (let i = data.length - pad; i < data.length; i++) {
+    if (data[i] !== pad) return data;
+  }
+  return data.subarray(0, data.length - pad);
+}
+
+
+/* ================= src/crc32.js ================= */
+/**
+ * CRC32（IEEE 802.3，ZIP 使用的那种）。查表实现，可用于流式增量计算。
+ * 浏览器 / Worker / Node 通用。
+ */
+
+const TABLE = (() => {
+  const t = new Uint32Array(256);
+  for (let n = 0; n < 256; n++) {
+    let c = n;
+    for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+    t[n] = c >>> 0;
+  }
+  return t;
+})();
+
+/**
+ * 增量更新 CRC32。首块传 0，后续传上一次返回值。
+ * @param {number} crc 上一次的 CRC（首块为 0）
+ * @param {Uint8Array} data
+ * @param {number} [start]
+ * @param {number} [end]
+ * @returns {number} 无符号 32 位 CRC
+ */
+function crc32Update(crc, data, start = 0, end = data.length) {
+  let c = (crc ^ 0xffffffff) >>> 0;
+  for (let i = start; i < end; i++) c = TABLE[(c ^ data[i]) & 0xff] ^ (c >>> 8);
+  return (c ^ 0xffffffff) >>> 0;
+}
+
+/** 一次性计算 CRC32 */
+function crc32(data) {
+  return crc32Update(0, data);
+}
+
+
+/* ================= src/ncm.js ================= */
+/**
+ * NCM 容器解析 + 解密核心（纯 JS，浏览器 / Node / Worker 通用，零依赖）。
+ *
+ * 权威依据（三份独立实现交叉验证）：
+ *   1. ncm2mp3-core 0.3.2 (Rust) — docs.rs 源码：parser.rs / crypto/rc4.rs / format.rs
+ *      https://docs.rs/crate/ncm2mp3-core/latest/source/src/
+ *   2. Johnserf-Seed/ncm2mp3/docs/ARCHITECTURE.md（含 cover_frame_len 新布局说明）
+ *   3. taurusxin/ncmdump src/ncmcrypt.cpp（C++ 参考实现）
+ *
+ * 磁盘布局（小端）：
+ *   [0,8)        magic "CTENFDAM"
+ *   [8,10)       2 字节 Gap
+ *   [10,14)      key_len (u32)
+ *   [14, +key)   key blob       ：需调用方提供 16 字节核心密钥（AES-128-ECB）
+ *   [.., +4)     meta_len (u32)
+ *   [.., +meta)  meta blob      ：需调用方提供 16 字节元数据密钥（AES-128-ECB）
+ *   [.., +4)     crc32 (u32，不校验)
+ *   [.., +1)     image version（1 字节，跳过）
+ *   [.., +4)     cover_frame_len (u32) — 封面帧总长（图片 + 尾部 padding）
+ *   [.., +4)     cover_len (u32)       — 封面图片本身长度
+ *   [.., +cover_len)  封面图片（JPEG/PNG，不加密）
+ *   [.., +padding)    封面 padding = cover_frame_len - cover_len
+ *   [audioOffset, EOF) 音频：NCM 自定义 RC4 变体流密码（见 transformInPlace）
+ *
+ * 音频偏移 = 31 + key_len + meta_len + cover_frame_len
+ */
+
+
+
+const NCM_MAGIC = 'CTENFDAM';
+const KEY_XOR_MASK = 0x64;
+const META_XOR_MASK = 0x63;
+const KEY_PREFIX = 'neteasecloudmusic';
+const META_PLAIN_PREFIX = "163 key(Don't modify):";
+const META_PREFIX = 'music:';
+
+/**
+ * 解析用户提供的密钥文本：16 字节 ASCII 或 32 位十六进制。
+ * 密钥不随程序分发，由使用者在本地输入。
+ * @param {string} text
+ * @param {string} [label]
+ * @returns {Uint8Array} 16 字节密钥
+ */
+function parseKeyMaterial(text, label = '解密密钥') {
+  const s = String(text ?? '').trim();
+  if (!s) throw new NcmError('NO_KEY', '请提供本地合法的解密密钥');
+  if (/^[0-9a-fA-F]{32}$/.test(s)) {
+    return Uint8Array.from(s.match(/.{2}/g), (h) => parseInt(h, 16));
+  }
+  const bytes = new TextEncoder().encode(s);
+  if (bytes.length !== 16) {
+    throw new NcmError('BAD_KEY', `${label}必须为 16 字节 ASCII 或 32 位十六进制`);
+  }
+  return bytes;
+}
+
+/** 将两个密钥文本转换为解析器需要的密钥对象 */
+function makeKeys(coreText, metaText) {
+  return {
+    core: parseKeyMaterial(coreText, '核心密钥'),
+    meta: parseKeyMaterial(metaText, '元数据密钥'),
+  };
+}
+
+/** 解析器统一入口：缺少密钥时给出明确提示 */
+function requireKeys(keys) {
+  if (!keys || !keys.core || !keys.meta) {
+    throw new NcmError('NO_KEY', '请提供本地合法的解密密钥');
+  }
+  return keys;
+}
+
+/** 单个段长度上限（正常 key/meta 只有几 KB，封面最多几 MB） */
+const MAX_SEGMENT_LEN = 64 * 1024 * 1024;
+/** 解析头部建议先读取的字节数；不足时会继续扩容读取 */
+const HEADER_PROBE_SIZE = 1024 * 1024;
+
+class NcmError extends Error {
+  constructor(code, message, details) {
+    super(message);
+    this.name = 'NcmError';
+    this.code = code;
+    this.details = details || null;
+  }
+}
+
+const U32 = (buf, off) =>
+  (buf[off] | (buf[off + 1] << 8) | (buf[off + 2] << 16) | (buf[off + 3] << 24)) >>> 0;
+
+/** 只读小工具：安全截取 UTF-8 字符串 */
+function decodeUtf8(bytes) {
+  try {
+    return new TextDecoder('utf-8', { fatal: false }).decode(bytes);
+  } catch {
+    return '';
+  }
+}
+
+/** Base64 → Uint8Array（浏览器 atob / Node Buffer 均可，这里用 atob 以便 worker 通用） */
+function base64Decode(str) {
+  const clean = str.replace(/[^A-Za-z0-9+/=]/g, '');
+  const padded = clean + '==='.slice(0, (4 - (clean.length % 4)) % 4);
+  const bin = atob(padded);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+
+/**
+ * RC4 KSA：用 key 材料生成 256 字节置换盒 S。
+ * 标准 RC4 KSA（j 累加）——与 ncmdump 的 lastByte 写法等价。
+ * @param {Uint8Array} key
+ * @returns {Uint8Array}
+ */
+function buildKeyBox(key) {
+  if (!key || key.length === 0) throw new NcmError('EMPTY_KEY', 'RC4 密钥为空');
+  const S = new Uint8Array(256);
+  for (let i = 0; i < 256; i++) S[i] = i;
+  let j = 0;
+  const klen = key.length;
+  for (let i = 0; i < 256; i++) {
+    j = (j + S[i] + key[i % klen]) & 0xff;
+    const t = S[i];
+    S[i] = S[j];
+    S[j] = t;
+  }
+  return S;
+}
+
+/**
+ * NCM 自定义字节流变换（加密与解密是同一操作：XOR）。
+ *
+ * 与标准 RC4 的区别：PRGA 不使用演化状态，密钥流字节只取决于**绝对偏移**：
+ *   j  = (offset + 1) & 0xFF
+ *   a  = S[j]
+ *   b  = S[(a + j) & 0xFF]
+ *   ks = S[(a + b) & 0xFF]
+ *   out[i] = in[i] ^ ks(offset + i)
+ *
+ * 因此密钥流周期为 256，且任意块长/任意起点都可独立处理——这是流式解码的前提。
+ * （很多实现按每 0x8000 缓冲区重置 i，隐含要求块长是 256 的倍数，本实现不需要。）
+ *
+ * @param {Uint8Array} data 就地修改
+ * @param {Uint8Array} keyBox 256 字节盒
+ * @param {number} offset 该块在音频流中的绝对偏移（从 0 开始）
+ */
+function transformInPlace(data, keyBox, offset) {
+  const S = keyBox;
+  const n = data.length;
+  for (let i = 0; i < n; i++) {
+    const j = (offset + i + 1) & 0xff;
+    const a = S[j];
+    const b = S[(a + j) & 0xff];
+    data[i] ^= S[(a + b) & 0xff];
+  }
+}
+
+/** 只算出偏移 0 开始的 256 字节密钥流（小文件 / 测试用） */
+function keystream(keyBox, length = 256, offset = 0) {
+  const out = new Uint8Array(length);
+  const S = keyBox;
+  for (let i = 0; i < length; i++) {
+    const j = (offset + i + 1) & 0xff;
+    const a = S[j];
+    const b = S[(a + j) & 0xff];
+    out[i] = S[(a + b) & 0xff];
+  }
+  return out;
+}
+
+/** 从解密后的音频头字节嗅探真实格式；未知返回 'bin' */
+function sniffFormat(head) {
+  if (!head || head.length < 2) return 'bin';
+  if (head.length >= 3 && head[0] === 0x49 && head[1] === 0x44 && head[2] === 0x33) return 'mp3'; // ID3
+  if (head[0] === 0xff && (head[1] & 0xe0) === 0xe0) return 'mp3'; // MPEG 帧同步
+  if (head.length >= 4 && head[0] === 0x66 && head[1] === 0x4c && head[2] === 0x61 && head[3] === 0x43) return 'flac';
+  if (head.length >= 4 && head[0] === 0x4f && head[1] === 0x67 && head[2] === 0x67 && head[3] === 0x53) return 'ogg';
+  if (head.length >= 12 && head[0] === 0x52 && head[1] === 0x49 && head[2] === 0x46 && head[3] === 0x46 &&
+      head[8] === 0x57 && head[9] === 0x41 && head[10] === 0x56 && head[11] === 0x45) return 'wav';
+  if (head.length >= 8 && head[4] === 0x66 && head[5] === 0x74 && head[6] === 0x79 && head[7] === 0x70) return 'm4a';
+  return 'bin';
+}
+
+/** 解析 key blob，返回 { keyUnpadded, keyRawPadded } 两个候选 RC4 密钥材料 */
+function decodeKeyBlob(blob, coreKey) {
+  const xored = new Uint8Array(blob.length);
+  for (let i = 0; i < blob.length; i++) xored[i] = blob[i] ^ KEY_XOR_MASK;
+  if (xored.length === 0 || xored.length % 16 !== 0) {
+    throw new NcmError('BAD_KEY_LEN', `key 段长度 ${xored.length} 不是 16 的倍数`);
+  }
+  const plain = aesEcbDecrypt(xored, coreKey);
+  const text = decodeUtf8(plain.subarray(0, 17));
+  if (text !== KEY_PREFIX) {
+    throw new NcmError('BAD_KEY_PREFIX', `key 段前缀异常：期望 "${KEY_PREFIX}"，实际 "${text}"`);
+  }
+  const unpadded = pkcs7Unpad(plain);
+  return {
+    // 主流实现（ncmdump / ncm2mp3-core）会去掉 PKCS#7 填充后取前缀之后的部分
+    keyUnpadded: unpadded.subarray(KEY_PREFIX.length),
+    // 兼容变体：不去填充（极少见，作为嗅探失败时的兜底候选）
+    keyRawPadded: plain.subarray(KEY_PREFIX.length),
+  };
+}
+
+/** 解析 meta blob（容忍失败：返回 null 而不是抛错） */
+function decodeMetaBlob(blob, metaKey) {
+  try {
+    if (blob.length === 0) return null;
+    const xored = new Uint8Array(blob.length);
+    for (let i = 0; i < blob.length; i++) xored[i] = blob[i] ^ META_XOR_MASK;
+
+    const prefixBytes = new TextEncoder().encode(META_PLAIN_PREFIX);
+    let prefixLen = prefixBytes.length;
+    // 极少数文件可能没有该前缀，按位置兜底
+    for (let i = 0; i < Math.min(prefixBytes.length, xored.length); i++) {
+      if (xored[i] !== prefixBytes[i]) { prefixLen = 0; break; }
+    }
+    const b64 = decodeUtf8(xored.subarray(prefixLen));
+    const decoded = base64Decode(b64);
+    if (decoded.length === 0 || decoded.length % 16 !== 0) return null;
+    const plain = pkcs7Unpad(aesEcbDecrypt(decoded, metaKey));
+    let jsonBytes = plain;
+    const musicPrefix = new TextEncoder().encode(META_PREFIX);
+    let hasPrefix = plain.length >= musicPrefix.length;
+    if (hasPrefix) {
+      for (let i = 0; i < musicPrefix.length; i++) {
+        if (plain[i] !== musicPrefix[i]) { hasPrefix = false; break; }
+      }
+    }
+    if (hasPrefix) jsonBytes = plain.subarray(musicPrefix.length);
+    const json = decodeUtf8(jsonBytes).replace(/^\uFEFF/, '');
+    return JSON.parse(json);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * 解析 NCM 头部（只需要文件开头的一段即可，不需要整个文件/封面内容）。
+ * @param {Uint8Array} buf 文件前缀，长度至少覆盖到 cover_len 字段
+ * @param {{core: Uint8Array, meta: Uint8Array}} keys 由使用者提供的 16 字节密钥
+ * @returns 头部信息对象
+ * @throws {NcmError} code=TRUNCATED 时调用方应读取更多字节后重试
+ */
+function parseHeader(buf, keys) {
+  const k = requireKeys(keys);
+  if (buf.length < 10) throw new NcmError('TRUNCATED', '文件过短，不足 10 字节', { need: 10, have: buf.length });
+  const magic = decodeUtf8(buf.subarray(0, 8));
+  if (magic !== NCM_MAGIC) throw new NcmError('BAD_MAGIC', `不是 NCM 文件（magic=${JSON.stringify(magic)}）`);
+
+  let need = 14;
+  if (buf.length < need) throw new NcmError('TRUNCATED', '头部不完整', { need, have: buf.length, stage: 'key_len' });
+  const keyLen = U32(buf, 10);
+  if (keyLen === 0 || keyLen > MAX_SEGMENT_LEN) throw new NcmError('BAD_KEY_LEN', `key 段长度异常：${keyLen}`);
+
+  const keyStart = 14;
+  const keyEnd = keyStart + keyLen;
+  need = keyEnd + 4;
+  if (buf.length < need) throw new NcmError('TRUNCATED', '头部不完整', { need, have: buf.length, stage: 'key_blob' });
+
+  const metaLen = U32(buf, keyEnd);
+  if (metaLen > MAX_SEGMENT_LEN) throw new NcmError('BAD_META_LEN', `meta 段长度异常：${metaLen}`);
+  const metaStart = keyEnd + 4;
+  const metaEnd = metaStart + metaLen;
+
+  need = metaEnd + 4 + 1 + 4 + 4; // crc32 + imageVersion + coverFrameLen + coverLen
+  if (buf.length < need) throw new NcmError('TRUNCATED', '头部不完整', { need, have: buf.length, stage: 'cover_frame' });
+
+  const crcOffset = metaEnd;
+  const imageVersion = buf[crcOffset + 4];
+  const coverFrameLen = U32(buf, crcOffset + 5);
+  const coverLen = U32(buf, crcOffset + 9);
+  if (coverFrameLen > MAX_SEGMENT_LEN || coverLen > coverFrameLen) {
+    throw new NcmError('BAD_COVER', `封面长度字段异常：frame=${coverFrameLen} image=${coverLen}`);
+  }
+  const coverOffset = crcOffset + 13;
+  const audioOffset = coverOffset + coverFrameLen;
+
+  const { keyUnpadded, keyRawPadded } = decodeKeyBlob(buf.subarray(keyStart, keyEnd), k.core);
+  const metadata = decodeMetaBlob(buf.subarray(metaStart, metaEnd), k.meta);
+
+  return {
+    magic,
+    keyLen,
+    metaLen,
+    keyMaterial: keyUnpadded,
+    keyMaterialPadded: keyRawPadded,
+    metadata,
+    formatHint: metadata && typeof metadata.format === 'string' ? metadata.format.toLowerCase() : '',
+    coverFrameLen,
+    coverLen,
+    coverOffset,
+    audioOffset,
+    imageVersion,
+    crc32: U32(buf, crcOffset),
+    fileSize: null,
+  };
+}
+
+/**
+ * 解析头部所需的最小前缀长度（用于流式读取时决定第一次读多少）。
+ * 返回 { need, complete }；complete=false 表示需要读取整个前缀才能确定。
+ */
+function probeHeader(buf, keys) {
+  try {
+    const header = parseHeader(buf, keys);
+    return { complete: true, header, need: header.audioOffset };
+  } catch (e) {
+    if (e instanceof NcmError && e.code === 'TRUNCATED' && e.details && typeof e.details.need === 'number') {
+      return { complete: false, need: e.details.need };
+    }
+    throw e;
+  }
+}
+
+/**
+ * 结合音频首块密文选择 RC4 密钥材料变体并判定格式。
+ * @param {object} header parseHeader 结果
+ * @param {Uint8Array} firstCipher 音频最前面的密文字节（至少 16 字节，越多越稳）
+ * @param {number} [fileSize] 已知文件大小时填入音频字节数
+ */
+function createDecoder(header, firstCipher, fileSize) {
+  const variants = [
+    { name: 'unpadded', key: header.keyMaterial },
+    { name: 'padded', key: header.keyMaterialPadded },
+  ];
+  const seen = new Set();
+  let chosen = null;
+  const probe = new Uint8Array(Math.min(16, firstCipher.length));
+  probe.set(firstCipher.subarray(0, probe.length));
+
+  for (const v of variants) {
+    if (!v.key || v.key.length === 0) continue;
+    const id = Array.from(v.key.subarray(0, 8)).join(',') + ':' + v.key.length;
+    if (seen.has(id)) continue;
+    seen.add(id);
+    let box;
+    try {
+      box = buildKeyBox(v.key);
+    } catch {
+      continue;
+    }
+    const head = probe.slice();
+    transformInPlace(head, box, 0);
+    const fmt = sniffFormat(head);
+    if (!chosen && fmt !== 'bin') chosen = { keyBox: box, format: fmt, variant: v.name, confident: true };
+    if (!chosen) chosen = { keyBox: box, format: fmt, variant: v.name, confident: false };
+  }
+  if (!chosen) throw new NcmError('BAD_KEY', '无法构造 RC4 密钥盒');
+
+  // 嗅探失败时退回元信息里的 format 提示
+  if (chosen.format === 'bin' && header.formatHint) chosen.format = header.formatHint;
+  if (chosen.format === 'bin') chosen.format = 'bin';
+
+  const audioSize = typeof fileSize === 'number' && fileSize >= header.audioOffset
+    ? fileSize - header.audioOffset
+    : null;
+
+  return {
+    keyBox: chosen.keyBox,
+    keyVariant: chosen.variant,
+    format: chosen.format,
+    confident: chosen.confident,
+    audioOffset: header.audioOffset,
+    audioSize,
+  };
+}
+
+/** Windows 文件名清洗 */
+function sanitizeFileName(name, maxLen = 120) {
+  let s = String(name ?? '').replace(/[\u0000-\u001f\u007f<>:"/\\|?*]/g, '_').trim();
+  s = s.replace(/[. ]+$/g, '');
+  if (!s) s = 'unnamed';
+  if (s.length > maxLen) {
+    // 保留扩展名
+    const dot = s.lastIndexOf('.');
+    if (dot > 0 && s.length - dot <= 8) {
+      const ext = s.slice(dot);
+      s = s.slice(0, maxLen - ext.length) + ext;
+    } else {
+      s = s.slice(0, maxLen);
+    }
+  }
+  return s;
+}
+
+/**
+ * 生成输出文件名：优先 "歌手 - 歌名"，其次元信息歌名，最后原文件名。
+ * @param {object|null} metadata NCM 元信息
+ * @param {string} originalName 原始 .ncm 文件名
+ * @param {string} format 输出扩展名（mp3/flac/...）
+ */
+function buildOutputName(metadata, originalName, format) {
+  const ext = (format || 'bin').replace(/^\./, '');
+  let base = '';
+  if (metadata && typeof metadata.musicName === 'string' && metadata.musicName.trim()) {
+    const artists = Array.isArray(metadata.artist)
+      ? metadata.artist
+          .map((a) => (Array.isArray(a) ? a[0] : a))
+          .filter((x) => typeof x === 'string' && x.trim())
+          .join(' & ')
+      : '';
+    base = artists ? `${artists} - ${metadata.musicName.trim()}` : metadata.musicName.trim();
+  } else {
+    base = String(originalName || 'unnamed').replace(/\.ncm$/i, '');
+  }
+  return sanitizeFileName(`${base}.${ext}`);
+}
+
+/** 便捷函数：把整个 NCM 字节流解码成音频字节（Node/测试用；浏览器请用流式） */
+function decodeNcmBuffer(ncmBytes, keys) {
+  const header = parseHeader(ncmBytes, keys);
+  const headLen = Math.min(16, Math.max(0, ncmBytes.length - header.audioOffset));
+  const dec = createDecoder(header, ncmBytes.subarray(header.audioOffset, header.audioOffset + headLen), ncmBytes.length);
+  const audio = ncmBytes.slice(header.audioOffset);
+  transformInPlace(audio, dec.keyBox, 0);
+  return {
+    format: dec.format,
+    metadata: header.metadata,
+    audio,
+    header,
+    keyVariant: dec.keyVariant,
+    outputName: buildOutputName(header.metadata, 'unnamed.ncm', dec.format),
+  };
+}
+
+
+/* ================= src/zip.js ================= */
+/**
+ * 极简 ZIP 写入器（仅 STORE 存储模式，不压缩）+ 零拷贝拼装。
+ *
+ * 设计要点（对应"为什么不再卡顿"）：
+ *   1. MP3/FLAC 本身已是压缩格式，再 DEFLATE 几乎不减小体积，却要消耗大量 CPU。
+ *      在主线程用 JSZip 做 DEFLATE 的实现，会在批量转换后出现明显的"假死期"。
+ *      这里用 STORE（method=0），CPU 开销≈0。
+ *   2. ZIP 的本地文件头/中央目录都是几十字节的小块，头像数据用 Blob 引用直接拼进去，
+ *      由浏览器负责零拷贝的 Blob 组装，主线程不搬运任何音频字节。
+ *   3. CRC32 在解码环节随流增量算出（见 src/crc32.js），不需要二次遍历。
+ *
+ * 浏览器环境依赖 Blob；Node 18+ 也有全局 Blob，因此可直接在 CLI 里复用。
+ */
+
+const LOCAL_SIG = 0x04034b50;
+const CENTRAL_SIG = 0x02014b50;
+const END_SIG = 0x06054b50;
+const FLAG_UTF8 = 0x0800; // bit 11：文件名为 UTF-8
+const VERSION_NEEDED = 20;
+const VERSION_MADE_BY = 20; // MS-DOS, 2.0
+
+/** 本地时间 → DOS date/time（ZIP 时间戳，2 秒精度） */
+function dosDateTime(date = new Date()) {
+  const year = Math.max(1980, date.getFullYear());
+  const dosTime = ((date.getHours() & 0x1f) << 11) | ((date.getMinutes() & 0x3f) << 5) | ((date.getSeconds() >> 1) & 0x1f);
+  const dosDate = (((year - 1980) & 0x7f) << 9) | (((date.getMonth() + 1) & 0x0f) << 5) | (date.getDate() & 0x1f);
+  return { dosTime, dosDate };
+}
+
+function u16(view, off, v) { view[off] = v & 0xff; view[off + 1] = (v >>> 8) & 0xff; }
+function u32(view, off, v) {
+  view[off] = v & 0xff;
+  view[off + 1] = (v >>> 8) & 0xff;
+  view[off + 2] = (v >>> 16) & 0xff;
+  view[off + 3] = (v >>> 24) & 0xff;
+}
+
+class ZipError extends Error {
+  constructor(code, message) { super(message); this.name = 'ZipError'; this.code = code; }
+}
+
+const MAX32 = 0xffffffff;
+
+/**
+ * 组装一个 STORE 模式 ZIP。
+ * @param {Array<{name: string, blob: Blob, crc32: number, size: number, mtime?: Date}>} entries
+ * @returns {Blob} application/zip
+ */
+function buildZipBlob(entries) {
+  if (!entries || entries.length === 0) throw new ZipError('EMPTY', '没有可打包的文件');
+  if (entries.length > 65535) throw new ZipError('TOO_MANY', '文件数超过 65535（ZIP 非 ZIP64 上限），请分批下载');
+
+  const encoder = new TextEncoder();
+  const parts = [];
+  const central = [];
+  let offset = 0;
+  const now = new Date();
+
+  for (const entry of entries) {
+    const size = entry.size >>> 0;
+    if (entry.size > MAX32) throw new ZipError('TOO_LARGE', `单文件超过 4GB：${entry.name}（请用 CLI 或单独下载）`);
+    if (offset > MAX32) throw new ZipError('TOO_LARGE', '总大小超过 4GB（ZIP 非 ZIP64 上限），请分批下载或用 CLI 打包');
+    const nameBytes = encoder.encode(entry.name);
+    const { dosTime, dosDate } = dosDateTime(entry.mtime || now);
+
+    const local = new Uint8Array(30 + nameBytes.length);
+    u32(local, 0, LOCAL_SIG);
+    u16(local, 4, VERSION_NEEDED);
+    u16(local, 6, FLAG_UTF8);
+    u16(local, 8, 0); // method = 0 (store)
+    u16(local, 10, dosTime);
+    u16(local, 12, dosDate);
+    u32(local, 14, entry.crc32 >>> 0);
+    u32(local, 18, size); // compressed size == size（store）
+    u32(local, 22, size);
+    u16(local, 26, nameBytes.length);
+    u16(local, 28, 0); // extra len
+    local.set(nameBytes, 30);
+
+    const cen = new Uint8Array(46 + nameBytes.length);
+    u32(cen, 0, CENTRAL_SIG);
+    u16(cen, 4, VERSION_MADE_BY);
+    u16(cen, 6, VERSION_NEEDED);
+    u16(cen, 8, FLAG_UTF8);
+    u16(cen, 10, 0);
+    u16(cen, 12, dosTime);
+    u16(cen, 14, dosDate);
+    u32(cen, 16, entry.crc32 >>> 0);
+    u32(cen, 20, size);
+    u32(cen, 24, size);
+    u16(cen, 28, nameBytes.length);
+    u16(cen, 30, 0); // extra
+    u16(cen, 32, 0); // comment
+    u16(cen, 34, 0); // disk
+    u16(cen, 36, 0); // internal attrs
+    u32(cen, 38, 0); // external attrs
+    u32(cen, 42, offset); // 本地头偏移
+    cen.set(nameBytes, 46);
+
+    parts.push(local, entry.blob);
+    central.push(cen);
+    offset += local.length + entry.size;
+  }
+
+  const centralOffset = offset;
+  // 非 ZIP64：中央目录偏移/大小也必须落在 u32 以内（覆盖"总量刚好跨过 4GB"的边界情况）
+  if (centralOffset > MAX32) {
+    throw new ZipError('TOO_LARGE', '总大小超过 4GB（ZIP 非 ZIP64 上限），请分批下载或用 CLI 打包');
+  }
+  let centralSize = 0;
+  for (const c of central) { parts.push(c); centralSize += c.length; }
+  if (centralSize > MAX32) throw new ZipError('TOO_LARGE', 'ZIP 中央目录超过 4GB，请分批下载');
+
+  const end = new Uint8Array(22);
+  u32(end, 0, END_SIG);
+  u16(end, 4, 0); // disk
+  u16(end, 6, 0); // cd disk
+  u16(end, 8, entries.length);
+  u16(end, 10, entries.length);
+  u32(end, 12, centralSize);
+  u32(end, 16, centralOffset);
+  u16(end, 20, 0); // comment len
+  parts.push(end);
+
+  return new Blob(parts, { type: 'application/zip' });
+}
+
+/** ZIP 条目名去重：a.mp3, a (2).mp3, ... */
+function uniqueZipNames(names) {
+  const used = new Set();
+  return names.map((name) => {
+    let candidate = name;
+    let n = 2;
+    while (used.has(candidate.toLowerCase())) {
+      const dot = name.lastIndexOf('.');
+      candidate = dot > 0 ? `${name.slice(0, dot)} (${n})${name.slice(dot)}` : `${name} (${n})`;
+      n++;
+    }
+    used.add(candidate.toLowerCase());
+    return candidate;
+  });
+}
+
+
+/* ================= src/final-app.js ================= */
+/**
+ * 最终分享版应用逻辑（会被 tools/build-single.mjs 打包进单文件 HTML）。
+ *
+ * 设计目标：双击 .html 即可用（file:// 也行），不需要服务器、不联网、零依赖。
+ *  - 正常情况：Worker 池（后台线程）转换，主线程只做 UI；
+ *  - 若浏览器/环境不允许 Worker（极少数 file:// 环境），自动降级为「主线程分片 + 让出事件循环」，
+ *    仍然不会长时间卡死页面。
+ */
+
+
+
+
+
+/* ============================== 基础常量 ============================== */
+const MiB = 1048576;
+const HARDWARE = navigator.hardwareConcurrency || 4;
+// 保守并发：大文件场景下限制同时解码数量，降低浏览器内存峰值
+const CONCURRENCY = Math.max(1, Math.min(2, HARDWARE - 1));
+const WORKER_CHUNK = 4 * 1048576;
+const MAIN_CHUNK = 2 * 1048576; // 降级模式：分片更小，配合 setTimeout 让出主线程
+const MIME = { mp3: 'audio/mpeg', flac: 'audio/flac', m4a: 'audio/mp4', wav: 'audio/wav', ogg: 'audio/ogg' };
+
+const $ = (sel, root = document) => root.querySelector(sel);
+
+/* ============================== 状态 ============================== */
+const state = {
+  entries: new Map(),
+  order: [],
+  seq: 0,
+  running: false,
+  cancelRequested: false,
+  mode: 'worker', // 'worker' | 'main'
+  pool: null,
+  poolSize: 0,
+  startedAt: 0,
+  finishedAt: 0,
+  idleWaiters: [],
+  renderQueued: false,
+  pendingRows: [],
+  rowRenderScheduled: false,
+  seenKeys: new Set(),
+  usedNames: new Set(),
+  zip: null,
+  summary: null,
+  keyText: { core: '', meta: '' },
+};
+
+/* ============================== 小工具 ============================== */
+function fmtSize(bytes) {
+  if (!Number.isFinite(bytes) || bytes < 0) return '—';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1048576) return `${(bytes / 1024).toFixed(1)} KB`;
+  if (bytes < 1073741824) return `${(bytes / 1048576).toFixed(1)} MB`;
+  return `${(bytes / 1073741824).toFixed(2)} GB`;
+}
+function fmtMs(ms) {
+  if (!Number.isFinite(ms) || ms <= 0) return '—';
+  return ms < 1000 ? `${Math.round(ms)} ms` : `${(ms / 1000).toFixed(2)} s`;
+}
+const STATUS_TEXT = { queued: '排队中', running: '转换中', done: '完成', error: '失败', aborted: '已取消' };
+
+let toastTimer = 0;
+function toast(msg) {
+  const el = $('#toast');
+  if (!el) return;
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 3200);
+}
+
+/* ============================== Worker 工厂 ============================== */
+/**
+ * 单文件版由打包器注入 `globalThis.__NCM_WORKER_FACTORY__`（Blob URL Worker）。
+ * 返回 null 表示当前环境不支持 Worker，调用方应降级到主线程分片模式。
+ */
+function canUseWorker() {
+  // 调试/验证用：?mainthread=1 强制走主线程降级路径
+  try {
+    if (new URLSearchParams(location.search).get('mainthread') === '1') return false;
+  } catch {
+    /* ignore */
+  }
+  const factory = globalThis.__NCM_WORKER_FACTORY__;
+  if (typeof factory !== 'function') return false;
+  try {
+    const w = factory();
+    if (!w) return false;
+    w.terminate();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/* ============================== Worker 池 ============================== */
+class Pool {
+  constructor(size, handlers) {
+    this.size = size;
+    this.handlers = handlers;
+    this.slots = [];
+    this.queue = [];
+    this.jobs = new Map();
+    this.cancelled = new Set();
+    this.closed = false;
+  }
+
+  spawn() {
+    const worker = globalThis.__NCM_WORKER_FACTORY__();
+    const slot = { worker, busy: false, currentId: 0, dead: false };
+    worker.onmessage = (ev) => this.onMessage(slot, ev.data);
+    worker.onerror = (ev) => {
+      slot.dead = true;
+      const id = slot.currentId;
+      slot.currentId = 0;
+      if (id) {
+        this.handlers.onError(id, { code: 'WORKER_CRASH', message: ev.message || '后台线程异常' });
+        const job = this.jobs.get(id);
+        this.jobs.delete(id);
+        job?.resolve({ done: false });
+      }
+      this.free(slot);
+    };
+    this.slots.push(slot);
+    return slot;
+  }
+
+  acquire() {
+    this.slots = this.slots.filter((s) => !s.dead);
+    for (const slot of this.slots) if (!slot.busy) return slot;
+    if (this.slots.length < this.size) return this.spawn();
+    return null;
+  }
+
+  run(task) {
+    return new Promise((resolve) => {
+      this.queue.push({ task, resolve });
+      this.dispatch();
+    });
+  }
+
+  dispatch() {
+    while (this.queue.length > 0) {
+      // 排队中的任务也要响应取消：不派发，直接结算
+      const next = this.queue[0];
+      if (this.cancelled.has(next.task.id)) {
+        this.queue.shift();
+        this.cancelled.delete(next.task.id);
+        this.handlers.onAborted(next.task.id);
+        next.resolve({ done: false, cancelled: true });
+        continue;
+      }
+      const slot = this.acquire();
+      if (!slot) return;
+      const job = this.queue.shift();
+      slot.busy = true;
+      slot.currentId = job.task.id;
+      this.jobs.set(job.task.id, job);
+      slot.worker.postMessage({
+        type: 'convert',
+        id: job.task.id,
+        file: job.task.file,
+        chunkSize: job.task.chunkSize,
+        coreKey: job.task.coreKey,
+        metaKey: job.task.metaKey,
+      });
+    }
+  }
+
+  onMessage(slot, msg) {
+    if (!msg) return;
+    const finish = (payload) => {
+      const job = this.jobs.get(msg.id);
+      this.jobs.delete(msg.id);
+      this.cancelled.delete(msg.id);
+      job?.resolve(payload);
+    };
+    try {
+      if (msg.type === 'meta') this.handlers.onMeta(msg);
+      else if (msg.type === 'progress') this.handlers.onProgress(msg);
+      else if (msg.type === 'done') this.handlers.onDone(msg);
+      else if (msg.type === 'error') this.handlers.onError(msg.id, msg);
+      else if (msg.type === 'aborted') this.handlers.onAborted(msg.id);
+    } catch (e) {
+      // UI 层异常绝不能把批次卡死：记录并继续调度
+      console.error('[ncm] 处理 Worker 消息失败:', e);
+      if (msg.type === 'done') this.handlers.onError(msg.id, { code: 'UI_ERROR', message: e?.message || String(e) });
+    } finally {
+      if (msg.type === 'done' || msg.type === 'error' || msg.type === 'aborted') {
+        finish({ done: msg.type === 'done' });
+        this.free(slot);
+      }
+    }
+  }
+
+  free(slot) {
+    slot.busy = false;
+    slot.currentId = 0;
+    this.dispatch();
+  }
+
+  abort(id) {
+    this.cancelled.add(id);
+    const slot = this.slots.find((s) => s.currentId === id);
+    if (slot) slot.worker.postMessage({ type: 'abort', id });
+  }
+
+  close() {
+    this.closed = true;
+    for (const slot of this.slots) slot.worker.terminate();
+    this.slots = [];
+    for (const job of this.queue) job.resolve({ done: false });
+    for (const job of this.jobs.values()) job.resolve({ done: false });
+    this.queue = [];
+    this.jobs.clear();
+    this.cancelled.clear();
+  }
+}
+
+/* ============================== 输出命名去重 ============================== */
+function uniqueOutName(name) {
+  let candidate = name;
+  let n = 2;
+  while (state.usedNames.has(candidate.toLowerCase())) {
+    const dot = name.lastIndexOf('.');
+    candidate = dot > 0 ? `${name.slice(0, dot)} (${n})${name.slice(dot)}` : `${name} (${n})`;
+    n++;
+  }
+  state.usedNames.add(candidate.toLowerCase());
+  return candidate;
+}
+
+/* ============================== 转换结果落地 ============================== */
+function finishEntry(entry, result) {
+  entry.status = 'done';
+  entry.blob = result.blob;
+  entry.bytesOut = result.size;
+  entry.crc32 = result.crc32;
+  entry.outName = uniqueOutName(result.outName || entry.outName || buildOutputName(null, entry.name, result.format || 'mp3'));
+  entry.format = result.format;
+  entry.ms = result.ms;
+  entry.progress = 1;
+  entry.objectUrl = URL.createObjectURL(result.blob);
+  scheduleRender();
+}
+
+function failEntry(entry, err) {
+  if (entry.status === 'aborted') return;
+  entry.status = state.cancelRequested ? 'aborted' : 'error';
+  entry.error = err?.message || String(err);
+  entry.progress = 1;
+  scheduleRender();
+}
+
+/* ============================== 主线程降级模式 ============================== */
+async function readWholeHeader(file, keys) {
+  let probeLen = Math.min(1048576, file.size);
+  for (;;) {
+    const buf = new Uint8Array(await file.slice(0, probeLen).arrayBuffer());
+    let pr;
+    try {
+      pr = probeHeader(buf, keys);
+    } catch (e) {
+      if (e instanceof NcmError && e.code === 'TRUNCATED' && probeLen < file.size) {
+        probeLen = Math.min(file.size, probeLen * 2);
+        continue;
+      }
+      throw e;
+    }
+    if (pr.complete) {
+      if (pr.header.audioOffset > file.size) throw new NcmError('TRUNCATED', '文件不完整');
+      return pr.header;
+    }
+    if (probeLen >= file.size) throw new NcmError('TRUNCATED', '文件头部不完整');
+    probeLen = Math.min(file.size, Math.max(pr.need * 2, probeLen * 2));
+  }
+}
+
+async function convertMainThread(entry, keyText) {
+  const file = entry.file;
+  const t0 = performance.now();
+  const keys = makeKeys(keyText.core, keyText.meta);
+  const header = await readWholeHeader(file, keys);
+  if (header.audioOffset >= file.size) throw new NcmError('NO_AUDIO', '没有音频数据');
+  const audioSize = file.size - header.audioOffset;
+
+  const headLen = Math.min(65536, audioSize);
+  const headBuf = new Uint8Array(await file.slice(header.audioOffset, header.audioOffset + headLen).arrayBuffer());
+  const dec = createDecoder(header, headBuf, file.size);
+  entry.format = dec.format;
+  entry.outName = buildOutputName(header.metadata, file.name, dec.format);
+  entry.bytesOut = audioSize;
+  entry.status = 'running';
+  scheduleRender();
+
+  const parts = [];
+  let offset = header.audioOffset;
+  let done = 0;
+  let crc = 0;
+  while (offset < file.size) {
+    if (state.cancelRequested) throw new NcmError('ABORTED', '已取消');
+    const len = Math.min(MAIN_CHUNK, file.size - offset);
+    const chunk = new Uint8Array(await file.slice(offset, offset + len).arrayBuffer());
+    transformInPlace(chunk, dec.keyBox, done);
+    crc = crc32Update(crc, chunk);
+    parts.push(chunk);
+    done += len;
+    offset += len;
+    entry.progress = done / audioSize;
+    scheduleRender();
+    // 关键：让出事件循环，让页面保持可交互（降级模式下仍不至于"无响应"）
+    await new Promise((r) => setTimeout(r, 0));
+  }
+  return {
+    blob: new Blob(parts, { type: MIME[dec.format] || 'application/octet-stream' }),
+    size: done,
+    crc32: crc >>> 0,
+    format: dec.format,
+    outName: entry.outName,
+    ms: performance.now() - t0,
+  };
+}
+
+/* ============================== 批次执行 ============================== */
+function poolHandlers() {
+  return {
+    onMeta(msg) {
+      const entry = state.entries.get(msg.id);
+      if (!entry) return;
+      entry.status = 'running';
+      entry.outName = msg.outputName;
+      entry.format = msg.format;
+      entry.bytesOut = msg.audioTotal;
+      entry.progress = 0;
+      scheduleRender();
+    },
+    onProgress(msg) {
+      const entry = state.entries.get(msg.id);
+      if (!entry) return;
+      entry.progress = msg.total > 0 ? msg.done / msg.total : 0;
+      entry.doneBytes = msg.done;
+      entry.bytesOut = msg.total;
+      scheduleRender();
+    },
+    onDone(msg) {
+      const entry = state.entries.get(msg.id);
+      if (!entry) return;
+      finishEntry(entry, {
+        blob: msg.blob,
+        size: msg.size,
+        crc32: msg.crc32,
+        outName: msg.outputName || entry.outName, // Worker 字段名是 outputName
+        format: msg.format,
+        ms: msg.ms,
+      });
+    },
+    onError(id, msg) {
+      const entry = state.entries.get(id);
+      if (entry) failEntry(entry, new NcmError(msg.code || 'ERROR', msg.message || '转换失败'));
+    },
+    onAborted(id) {
+      const entry = state.entries.get(id);
+      if (entry) {
+        entry.status = 'aborted';
+        entry.progress = 1;
+        scheduleRender();
+      }
+    },
+  };
+}
+
+async function runWorkerMode(entries, keyText) {
+  state.mode = 'worker';
+  state.pool = new Pool(Math.max(1, CONCURRENCY), poolHandlers());
+  state.poolSize = Math.max(1, CONCURRENCY);
+  await Promise.all(
+    entries.map(async (entry) => {
+      const result = await state.pool.run({
+        id: entry.id,
+        file: entry.file,
+        chunkSize: WORKER_CHUNK,
+        coreKey: keyText.core,
+        metaKey: keyText.meta,
+      });
+      if (!result || !result.done) {
+        if (entry.status === 'queued' || entry.status === 'running') {
+          if (state.cancelRequested) entry.status = 'aborted';
+        }
+      }
+    })
+  );
+  state.pool.close();
+  state.pool = null;
+  state.poolSize = 0;
+}
+
+async function runMainMode(entries, keyText) {
+  state.mode = 'main';
+  state.poolSize = 0;
+  for (const entry of entries) {
+    if (state.cancelRequested) {
+      entry.status = 'aborted';
+      scheduleRender();
+      continue;
+    }
+    entry.status = 'running';
+    scheduleRender();
+    try {
+      const result = await convertMainThread(entry, keyText);
+      finishEntry(entry, result);
+    } catch (e) {
+      failEntry(entry, e);
+    }
+  }
+}
+
+/** 读取并校验 UI 中的两个密钥输入；缺失时提示并返回 null */
+function readKeyInputs() {
+  const coreEl = $('#key-core');
+  const metaEl = $('#key-meta');
+  const core = coreEl ? coreEl.value : state.keyText.core;
+  const meta = metaEl ? metaEl.value : state.keyText.meta;
+  try {
+    makeKeys(core, meta);
+  } catch (e) {
+    toast(e?.message || '请提供本地合法的解密密钥');
+    const target = coreEl && !coreEl.value.trim() ? coreEl : metaEl;
+    target?.focus();
+    return null;
+  }
+  state.keyText = { core, meta };
+  return state.keyText;
+}
+
+/** 将密钥写入输入框与内存状态（用于本地配置载入） */
+function applyKeyText(core, meta) {
+  const coreEl = $('#key-core');
+  const metaEl = $('#key-meta');
+  if (coreEl) coreEl.value = String(core ?? '');
+  if (metaEl) metaEl.value = String(meta ?? '');
+  state.keyText = { core: String(core ?? ''), meta: String(meta ?? '') };
+}
+
+/** 解析 config.local.json / config.example.json 的 JSON 文本 */
+function parseConfigText(text) {
+  const data = JSON.parse(text);
+  const core = data.CORE_KEY;
+  const meta = data.META_KEY;
+  if (typeof core !== 'string' || typeof meta !== 'string') {
+    throw new Error('配置文件需包含 CORE_KEY 与 META_KEY');
+  }
+  makeKeys(core, meta); // 仅校验，不保存字节
+  return { core, meta };
+}
+
+/** 从用户选择的 config.local.json 载入密钥 */
+async function loadConfigFile(file) {
+  try {
+    const text = await file.text();
+    const { core, meta } = parseConfigText(text);
+    applyKeyText(core, meta);
+    toast('已载入本地配置');
+  } catch (e) {
+    toast('配置载入失败：' + (e?.message || e));
+  }
+}
+
+/**
+ * 尝试自动读取同目录 config.local.json。
+ * 仅在通过 HTTP 打开页面时可用；file:// 下浏览器会拒绝本地 fetch，此时回退到手动输入/载入按钮。
+ */
+async function tryAutoLoadConfig() {
+  // file:// 下浏览器禁止本地 fetch，直接回退到手动输入/载入按钮
+  if (location.protocol === 'file:') return false;
+  try {
+    const res = await fetch('config.local.json', { cache: 'no-store' });
+    if (!res.ok) return false;
+    const { core, meta } = parseConfigText(await res.text());
+    applyKeyText(core, meta);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function startBatch() {
+  if (state.running) return;
+  const queue = state.order
+    .map((id) => state.entries.get(id))
+    .filter((e) => e && (e.status === 'queued' || e.status === 'error' || e.status === 'aborted'));
+  if (queue.length === 0) {
+    toast('没有待转换的文件');
+    return;
+  }
+  const keyText = readKeyInputs();
+  if (!keyText) return;
+  state.cancelRequested = false;
+  state.running = true;
+  state.startedAt = performance.now();
+  state.finishedAt = 0;
+  state.summary = null;
+  state.usedNames.clear();
+  for (const id of state.order) {
+    const e = state.entries.get(id);
+    // 已完成的不重跑；重置其余
+    if (e.status !== 'done') {
+      e.status = 'queued';
+      e.progress = 0;
+      e.error = null;
+    }
+  }
+  const pending = state.order.map((id) => state.entries.get(id)).filter((e) => e && e.status === 'queued');
+  syncButtons();
+  scheduleRender();
+
+  try {
+    if (canUseWorker()) await runWorkerMode(pending, keyText);
+    else await runMainMode(pending, keyText);
+  } catch (e) {
+    console.error(e);
+    toast('转换过程出错：' + (e?.message || e));
+    // 兜底：把未完成的条目标记为失败，避免界面一直停在"转换中"
+    for (const id of state.order) {
+      const entry = state.entries.get(id);
+      if (entry && (entry.status === 'queued' || entry.status === 'running')) {
+        failEntry(entry, e);
+      }
+    }
+  } finally {
+    state.running = false;
+    state.finishedAt = performance.now();
+    syncButtons();
+    scheduleRender();
+    flushIdle();
+  }
+}
+
+function waitIdle() {
+  if (!state.running) return Promise.resolve();
+  return new Promise((resolve) => state.idleWaiters.push(resolve));
+}
+function flushIdle() {
+  const waiters = state.idleWaiters.splice(0);
+  for (const r of waiters) r();
+}
+
+/* ============================== 文件入队 ============================== */
+function fileKey(file) {
+  return `${file.name}\u0000${file.size}\u0000${file.lastModified}`;
+}
+
+function addFile(file) {
+  if (!file || !/\.ncm$/i.test(file.name)) return false;
+  const key = fileKey(file);
+  if (state.seenKeys.has(key)) return false; // O(1) 去重（原实现是 O(n²) 扫描）
+  const id = ++state.seq;
+  const entry = {
+    id,
+    file,
+    name: file.name,
+    size: file.size,
+    status: 'queued',
+    progress: 0,
+    doneBytes: 0,
+    bytesOut: 0,
+    outName: '',
+    format: '',
+    error: null,
+    ms: 0,
+    blob: null,
+    crc32: 0,
+    objectUrl: null,
+    el: null,
+  };
+  state.entries.set(id, entry);
+  state.order.push(id);
+  state.seenKeys.add(key);
+  entry.key = key;
+  // 批量入场时分帧渲染，避免 500 个文件一次性建 DOM 造成长任务
+  state.pendingRows.push(entry);
+  scheduleRowRender();
+  scheduleRender();
+  return true;
+}
+
+function addFiles(files) {
+  const list = Array.from(files || []);
+  let added = 0;
+  let ignored = 0;
+  for (const f of list) {
+    if (addFile(f)) added++;
+    else if (!/\.ncm$/i.test(f.name)) ignored++;
+  }
+  if (ignored) toast(`已忽略 ${ignored} 个非 .ncm 文件`);
+  syncButtons();
+  if (added > 0 && !state.running) startBatch();
+  return added;
+}
+
+async function collectEntry(entry, out) {
+  if (!entry) return;
+  if (entry.isFile) {
+    out.push(await new Promise((res, rej) => entry.file(res, rej)));
+    return;
+  }
+  if (entry.isDirectory) {
+    const reader = entry.createReader();
+    for (;;) {
+      const batch = await new Promise((res, rej) => reader.readEntries(res, rej));
+      if (!batch.length) break;
+      for (const child of batch) await collectEntry(child, out);
+    }
+  }
+}
+
+/* ============================== 渲染 ============================== */
+const ROW_CHUNK = 40; // 每帧最多新建 40 行：500 个文件分 13 帧渲染完，不产生长任务
+
+function scheduleRowRender() {
+  if (state.rowRenderScheduled) return;
+  state.rowRenderScheduled = true;
+  requestAnimationFrame(flushRows);
+}
+
+function flushRows() {
+  state.rowRenderScheduled = false;
+  const rowsEl = $('#rows');
+  if (!rowsEl) return;
+  const batch = state.pendingRows.splice(0, ROW_CHUNK);
+  const frag = document.createDocumentFragment();
+  const live = [];
+  for (const entry of batch) {
+    if (!state.entries.has(entry.id)) continue; // 渲染前被删除
+    frag.appendChild(buildRow(entry));
+    live.push(entry);
+  }
+  rowsEl.appendChild(frag);
+  for (const entry of live) patchRow(entry);
+  if (state.pendingRows.length) scheduleRowRender();
+  syncButtons();
+  scheduleRender();
+}
+
+function scheduleRender() {
+  if (state.renderQueued) return;
+  state.renderQueued = true;
+  requestAnimationFrame(() => {
+    state.renderQueued = false;
+    patchAll();
+  });
+}
+
+function setText(sel, text) {
+  const el = document.querySelector(sel);
+  if (el && el.textContent !== text) el.textContent = text;
+}
+
+/** 行内图标按钮（DOM API 构建，避免字符串拼 HTML；图标见 template.html sprite） */
+function iconBtn(iconId, title, extraClass = '') {
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = `btn-icon ${extraClass}`.trim();
+  btn.title = title;
+  btn.setAttribute('aria-label', title);
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('class', 'icon');
+  const use = document.createElementNS('http://www.w3.org/2000/svg', 'use');
+  use.setAttribute('href', `#${iconId}`);
+  svg.appendChild(use);
+  btn.appendChild(svg);
+  return btn;
+}
+
+function buildRow(entry) {
+  const tr = document.createElement('tr');
+  tr.dataset.id = String(entry.id);
+  tr.innerHTML = `
+    <td class="c-name">
+      <div class="row-main">
+        <span class="row-icon"><svg class="icon"><use href="#i-music"></use></svg></span>
+        <div class="row-text"><div class="fname"></div><div class="fmeta"></div></div>
+      </div>
+    </td>
+    <td class="c-status"><span class="state"><i class="dot"></i><span class="label"></span></span></td>
+    <td class="c-progress"><div class="bar"><i></i></div><div class="pct"></div></td>
+    <td class="c-out"><span class="out"></span></td>
+    <td class="c-act"></td>`;
+  entry.el = {
+    tr,
+    name: tr.querySelector('.fname'),
+    meta: tr.querySelector('.fmeta'),
+    state: tr.querySelector('.state'),
+    stateLabel: tr.querySelector('.state .label'),
+    bar: tr.querySelector('.bar > i'),
+    pct: tr.querySelector('.pct'),
+    out: tr.querySelector('.out'),
+    act: tr.querySelector('.c-act'),
+  };
+  entry.el.name.textContent = entry.name;
+  entry.el.name.title = entry.name;
+  return tr;
+}
+
+function patchRow(entry) {
+  const el = entry.el;
+  if (!el) return;
+  const status = entry.status;
+  const label = STATUS_TEXT[status] || status;
+  if (el.stateLabel.textContent !== label) el.stateLabel.textContent = label;
+  const cls = `state ${status === 'running' ? 'run' : status === 'done' ? 'done' : status === 'error' ? 'err' : ''}`.trim();
+  if (el.state.className !== cls) el.state.className = cls;
+
+  const pct = status === 'done' || status === 'error' || status === 'aborted' ? 1 : Math.min(1, entry.progress || 0);
+  const width = `${(pct * 100).toFixed(1)}%`;
+  if (el.bar.style.width !== width) el.bar.style.width = width;
+  el.bar.className = status === 'done' ? 'done' : status === 'error' ? 'err' : '';
+  const pctText = status === 'done' ? '100%' : status === 'error' || status === 'aborted' ? '—' : `${Math.round(pct * 100)}%`;
+  if (el.pct.textContent !== pctText) el.pct.textContent = pctText;
+
+  const meta = [fmtSize(entry.size)];
+  if (entry.format) meta.push(entry.format.toUpperCase());
+  if (status === 'done' && entry.ms) meta.push(`${fmtMs(entry.ms)} · ${(entry.bytesOut / 1048576 / (entry.ms / 1000)).toFixed(1)} MB/s`);
+  if (status === 'error' && entry.error) meta.push(entry.error);
+  const metaText = meta.join(' · ');
+  if (el.meta.textContent !== metaText) el.meta.textContent = metaText;
+
+  const outText = entry.outName || '—';
+  if (el.out.textContent !== outText) el.out.textContent = outText;
+  el.out.title = outText;
+
+  const want = status === 'done' ? 'dl,del' : status === 'error' || status === 'aborted' ? 'retry,del' : 'del';
+  if (el.act.dataset.kind !== want) {
+    el.act.dataset.kind = want;
+    const buttons = [];
+    if (want.includes('dl')) buttons.push(iconBtn('i-download', '下载'));
+    if (want.includes('retry')) buttons.push(iconBtn('i-refresh', '重试'));
+    if (status !== 'running') buttons.push(iconBtn('i-trash', '删除', 'danger'));
+    el.act.replaceChildren(...buttons);
+    for (const b of buttons) {
+      const title = b.title;
+      if (title === '下载') b.onclick = () => downloadEntry(entry.id);
+      else if (title === '重试') b.onclick = () => retryEntry(entry.id);
+      else b.onclick = () => removeEntry(entry.id);
+    }
+  }
+}
+
+function patchAll() {
+  for (const id of state.order) {
+    const e = state.entries.get(id);
+    if (e && e.el) patchRow(e);
+  }
+  // 总进度
+  let totalBytes = 0;
+  let doneBytes = 0;
+  let doneFiles = 0;
+  let failed = 0;
+  let outBytes = 0;
+  for (const id of state.order) {
+    const e = state.entries.get(id);
+    if (!e) continue;
+    totalBytes += e.size;
+    if (e.status === 'done') {
+      doneFiles++;
+      doneBytes += e.size;
+      outBytes += e.bytesOut || 0;
+    } else if (e.status === 'running' || e.status === 'queued') {
+      doneBytes += Math.min(e.size, (e.progress || 0) * e.size);
+    } else if (e.status === 'error') failed++;
+  }
+  const total = state.order.length;
+  const pct = totalBytes > 0 ? Math.min(100, (doneBytes / totalBytes) * 100) : 0;
+  const bar = $('#overall-bar');
+  bar.style.width = `${pct.toFixed(1)}%`;
+  bar.className = !state.running && total > 0 && doneFiles === total ? 'done' : failed ? 'err' : '';
+  const elapsed = state.startedAt ? (state.finishedAt || performance.now()) - state.startedAt : 0;
+  const speed = elapsed > 0 ? outBytes / (elapsed / 1000) : 0;
+  let label;
+  if (total === 0) label = '等待文件';
+  else if (state.running) label = `${doneFiles}/${total} · ${Math.round(pct)}%${speed > 0 ? ` · ${(speed / 1048576).toFixed(1)} MB/s` : ''}`;
+  else label = `${doneFiles}/${total} 完成${failed ? ` · ${failed} 失败` : ''}`;
+  if ($('#overall-text').textContent !== label) $('#overall-text').textContent = label;
+
+  // KPI 统计卡片
+  setText('#overall-pct', `${Math.round(pct)}%`);
+  setText('#stat-files', `${doneFiles} / ${total}`);
+  setText('#stat-size', fmtSize(totalBytes));
+  setText('#stat-speed', speed > 0 ? `${(speed / 1048576).toFixed(1)} MB/s` : '—');
+  setText('#stat-time', elapsed > 0 ? fmtMs(elapsed) : '—');
+  setText('#table-hint', total === 0 ? '等待拖入文件' : `${total} 个文件 · ${fmtSize(totalBytes)}`);
+
+  $('#empty').style.display = total === 0 ? '' : 'none';
+  const tableCard = $('.table-card');
+  if (tableCard) tableCard.classList.toggle('is-empty', total === 0);
+
+  // 完成汇总
+  const summaryEl = $('#summary');
+  const allSettled = total > 0 && !state.running && doneFiles + failed + countAborted() === total;
+  if (allSettled) {
+    summaryEl.hidden = false;
+    $('#summary-title').textContent = failed ? `转换完成（${failed} 个失败）` : '全部转换完成';
+    $('#summary-sub').textContent =
+      `${doneFiles} 个文件 · ${fmtSize(totalBytes)} → ${fmtSize(outBytes)}` +
+      (elapsed ? ` · 用时 ${fmtMs(elapsed)}` : '') +
+      (elapsed > 0 && outBytes > 0 ? ` · 平均 ${(outBytes / 1048576 / (elapsed / 1000)).toFixed(1)} MB/s` : '');
+  } else {
+    summaryEl.hidden = true;
+  }
+}
+
+function countAborted() {
+  let n = 0;
+  for (const id of state.order) if (state.entries.get(id)?.status === 'aborted') n++;
+  return n;
+}
+
+function syncButtons() {
+  const total = state.order.length;
+  const hasQueued = state.order.some((id) => ['queued', 'error', 'aborted'].includes(state.entries.get(id)?.status));
+  const hasDone = state.order.some((id) => state.entries.get(id)?.status === 'done');
+  $('#btn-start').disabled = state.running || !hasQueued;
+  $('#btn-cancel').disabled = !state.running;
+  $('#btn-download-all').disabled = !hasDone;
+  $('#btn-zip').disabled = !hasDone || state.running;
+  $('#btn-clear').disabled = total === 0 || state.running;
+}
+
+/* ============================== 下载 / ZIP ============================== */
+function downloadEntry(id) {
+  const entry = state.entries.get(id);
+  if (!entry?.blob) return;
+  const a = document.createElement('a');
+  a.href = entry.objectUrl || URL.createObjectURL(entry.blob);
+  a.download = entry.outName || entry.name.replace(/\.ncm$/i, '.mp3');
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+}
+
+async function downloadAll() {
+  const done = state.order.map((id) => state.entries.get(id)).filter((e) => e?.status === 'done');
+  if (!done.length) return;
+  if (done.length > 5) toast(`即将下载 ${done.length} 个文件，浏览器可能会询问是否允许多文件下载；也可以改用「打包 ZIP」`);
+  for (let i = 0; i < done.length; i++) {
+    downloadEntry(done[i].id);
+    if (i < done.length - 1) await new Promise((r) => setTimeout(r, 300));
+  }
+}
+
+async function makeZip() {
+  const done = state.order.map((id) => state.entries.get(id)).filter((e) => e?.status === 'done' && e.blob);
+  if (!done.length) throw new Error('还没有已完成的文件');
+  const t0 = performance.now();
+  const names = uniqueZipNames(done.map((e) => e.outName || e.name.replace(/\.ncm$/i, '.mp3')));
+  const blob = buildZipBlob(done.map((e, i) => ({ name: names[i], blob: e.blob, crc32: e.crc32 || 0, size: e.bytesOut || e.blob.size })));
+  const ms = performance.now() - t0;
+  state.zip = { ms, size: blob.size, name: `ncm2mp3-${done.length}files.zip`, entries: done.length };
+  return { blob, ms, url: URL.createObjectURL(blob) };
+}
+
+async function downloadZip() {
+  const btn = $('#btn-zip');
+  btn.disabled = true;
+  const old = btn.textContent;
+  btn.textContent = '打包中…';
+  try {
+    const { url, blob } = await makeZip();
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `ncm2mp3-${new Date().toISOString().slice(0, 10)}-${state.order.filter((id) => state.entries.get(id)?.status === 'done').length}files.zip`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+    toast(`已生成 ZIP：${fmtSize(blob.size)}`);
+  } catch (e) {
+    toast(e.message);
+  } finally {
+    btn.textContent = old;
+    syncButtons();
+  }
+}
+
+/* ============================== 操作 ============================== */
+function removeEntry(id) {
+  const entry = state.entries.get(id);
+  if (!entry || entry.status === 'running') {
+    if (entry?.status === 'running') toast('正在转换的文件不能删除');
+    return;
+  }
+  if (entry.objectUrl) URL.revokeObjectURL(entry.objectUrl);
+  if (entry.key) state.seenKeys.delete(entry.key);
+  entry.el?.tr.remove();
+  state.entries.delete(id);
+  state.order = state.order.filter((x) => x !== id);
+  scheduleRender();
+}
+
+function retryEntry(id) {
+  const entry = state.entries.get(id);
+  if (!entry || state.running) return;
+  entry.status = 'queued';
+  entry.progress = 0;
+  entry.error = null;
+  startBatch();
+}
+
+function cancelAll() {
+  if (!state.running) return;
+  state.cancelRequested = true;
+  if (state.pool) {
+    for (const id of state.order) {
+      const e = state.entries.get(id);
+      if (e && ['queued', 'running'].includes(e.status)) state.pool.abort(id);
+    }
+    // 所有待取消 id 已标记后再调度，避免取消过程中又启动排队任务
+    state.pool.dispatch();
+  }
+  toast('已请求取消');
+}
+
+function clearAll() {
+  if (state.running) {
+    toast('转换中不能清空');
+    return;
+  }
+  for (const e of state.entries.values()) if (e.objectUrl) URL.revokeObjectURL(e.objectUrl);
+  state.entries.clear();
+  state.order = [];
+  state.pendingRows = [];
+  state.rowRenderScheduled = false;
+  state.seenKeys.clear();
+  state.startedAt = 0;
+  state.finishedAt = 0;
+  state.usedNames.clear();
+  state.summary = null;
+  $('#rows').innerHTML = '';
+  patchAll();
+}
+
+/* ============================== 事件绑定 ============================== */
+function bind() {
+  const input = $('#file-input');
+  const pick = () => input.click();
+  $('#btn-pick').onclick = (e) => {
+    e.stopPropagation();
+    pick();
+  };
+  const drop = $('#drop');
+  drop.onclick = pick;
+  drop.onkeydown = (e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      pick();
+    }
+  };
+  input.onchange = () => {
+    addFiles(input.files);
+    input.value = '';
+  };
+
+  for (const type of ['dragenter', 'dragover']) {
+    drop.addEventListener(type, (e) => {
+      e.preventDefault();
+      drop.classList.add('is-over');
+    });
+  }
+  for (const type of ['dragleave', 'drop']) {
+    drop.addEventListener(type, (e) => {
+      e.preventDefault();
+      drop.classList.remove('is-over');
+    });
+  }
+  drop.addEventListener('drop', async (e) => {
+    const dt = e.dataTransfer;
+    if (!dt) return;
+    const files = [];
+    if (dt.items && dt.items.length) {
+      const entries = [];
+      for (const item of dt.items) {
+        const en = item.webkitGetAsEntry?.();
+        if (en) entries.push(en);
+        else {
+          const f = item.getAsFile?.();
+          if (f) files.push(f);
+        }
+      }
+      for (const en of entries) await collectEntry(en, files);
+    } else {
+      files.push(...Array.from(dt.files || []));
+    }
+    addFiles(files);
+  });
+
+  $('#btn-start').onclick = () => startBatch();
+  $('#btn-cancel').onclick = () => cancelAll();
+  $('#btn-load-config').onclick = () => $('#config-input').click();
+  $('#config-input').onchange = async (e) => {
+    const f = e.target.files && e.target.files[0];
+    if (f) await loadConfigFile(f);
+    e.target.value = '';
+  };
+  $('#btn-download-all').onclick = () => downloadAll();
+  $('#btn-zip').onclick = () => downloadZip();
+  $('#btn-clear').onclick = () => clearAll();
+  window.addEventListener('beforeunload', (e) => {
+    if (state.running) {
+      e.preventDefault();
+      e.returnValue = '';
+    }
+  });
+}
+
+/* ============================== 自动化钩子（供自检/CI 使用） ============================== */
+function getMetrics() {
+  const results = state.order.map((id) => state.entries.get(id)).filter(Boolean).map((e) => ({
+    name: e.name,
+    outName: e.outName,
+    inBytes: e.size,
+    outBytes: e.bytesOut || 0,
+    format: e.format,
+    status: e.status,
+    ok: e.status === 'done',
+    error: e.error || null,
+    ms: Math.round(e.ms || 0),
+  }));
+  const elapsed = state.startedAt ? (state.finishedAt || performance.now()) - state.startedAt : 0;
+  const bytesOut = results.reduce((s, r) => s + (r.ok ? r.outBytes : 0), 0);
+  return {
+    version: '0.0.1',
+    mode: state.mode,
+    files: state.order.length,
+    done: results.filter((r) => r.ok).length,
+    failed: results.filter((r) => r.status === 'error').length,
+    aborted: results.filter((r) => r.status === 'aborted').length,
+    bytesIn: results.reduce((s, r) => s + r.inBytes, 0),
+    bytesOut,
+    wallMs: Math.round(elapsed),
+    throughputMBps: elapsed > 0 ? +(bytesOut / 1048576 / (elapsed / 1000)).toFixed(2) : 0,
+    zip: state.zip ? { ...state.zip } : null,
+    results,
+  };
+}
+
+async function sha256Results() {
+  const out = [];
+  for (const id of state.order) {
+    const e = state.entries.get(id);
+    if (!e?.blob) continue;
+    const buf = await e.blob.arrayBuffer();
+    const digest = await crypto.subtle.digest('SHA-256', buf);
+    const hex = Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, '0')).join('');
+    out.push({ name: e.name, outName: e.outName, bytes: e.blob.size, sha256: hex });
+  }
+  return out;
+}
+
+async function reset() {
+  clearAll();
+  return true;
+}
+
+window.__ncm = {
+  version: '0.0.1',
+  ready: Promise.resolve(true),
+  addFiles: async (files) => addFiles(files),
+  start: () => startBatch(),
+  setKeys: (core, meta) => {
+    const coreEl = $('#key-core');
+    const metaEl = $('#key-meta');
+    if (coreEl) coreEl.value = String(core ?? '');
+    if (metaEl) metaEl.value = String(meta ?? '');
+    state.keyText = { core: String(core ?? ''), meta: String(meta ?? '') };
+    return true;
+  },
+  waitIdle,
+  reset,
+  getMetrics,
+  getResults: getMetrics,
+  makeZip,
+  downloadAll,
+  downloadZip,
+  sha256Results,
+  state,
+  get busy() {
+    return state.running;
+  },
+};
+
+/* ============================== 主题 / 快捷键 ============================== */
+const THEME_KEY = 'ncm2mp3-theme';
+
+function applyTheme(theme) {
+  const next = theme === 'dark' ? 'dark' : 'light';
+  document.documentElement.dataset.theme = next;
+  const use = document.querySelector('#theme-toggle use');
+  if (use) use.setAttribute('href', next === 'dark' ? '#i-sun' : '#i-moon');
+  const btn = $('#theme-toggle');
+  if (btn) {
+    btn.title = next === 'dark' ? '切换到浅色主题' : '切换到深色主题';
+    btn.setAttribute('aria-label', btn.title);
+  }
+}
+
+function initTheme() {
+  let saved = null;
+  try {
+    saved = localStorage.getItem(THEME_KEY);
+  } catch {
+    /* file:// 或隐私模式下可能不可用 */
+  }
+  let systemDark = false;
+  try {
+    systemDark = !!(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+  } catch {
+    /* ignore */
+  }
+  applyTheme(saved || (systemDark ? 'dark' : 'light'));
+  const btn = $('#theme-toggle');
+  if (btn) {
+    btn.onclick = () => {
+      const next = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+      applyTheme(next);
+      try {
+        localStorage.setItem(THEME_KEY, next);
+      } catch {
+        /* ignore */
+      }
+    };
+  }
+  try {
+    const mq = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)');
+    if (mq && mq.addEventListener) {
+      mq.addEventListener('change', (e) => {
+        let override = null;
+        try {
+          override = localStorage.getItem(THEME_KEY);
+        } catch {
+          /* ignore */
+        }
+        if (!override) applyTheme(e.matches ? 'dark' : 'light');
+      });
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
+function initShortcuts() {
+  document.addEventListener('keydown', (e) => {
+    // Ctrl/Cmd + O：打开文件选择
+    if ((e.ctrlKey || e.metaKey) && (e.key === 'o' || e.key === 'O')) {
+      e.preventDefault();
+      $('#btn-pick')?.click();
+    }
+  });
+}
+
+/* ============================== 启动 ============================== */
+function boot() {
+  bind();
+  initTheme();
+  initShortcuts();
+  patchAll();
+  // 优先尝试读取同目录 config.local.json（HTTP 环境可用；file:// 会自动回退到手动输入）
+  void tryAutoLoadConfig();
+  // 若浏览器完全禁用了 Worker，启动时提示一次（不阻塞使用）
+  if (!canUseWorker()) {
+    console.info('[ncm] 当前环境不支持 Worker，已自动使用主线程分片模式');
+  }
+  window.__ncm.ready = Promise.resolve(true);
+}
+
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
+else boot();
+
+
+})();
+</script>
+</body>
+</html>
